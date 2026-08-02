@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1120">
+<!-- Ajouté à l'écran d'accueil sur iOS, le jeu s'ouvre sans barre Safari -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Combat">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Combat — manette tactile</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  body{
+    margin:0;background:#0d1120;color:#cbd5f0;
+    font:14px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    touch-action:none;position:fixed;inset:0;
+  }
+  /* le conteneur occupe tout l'écran : Phaser (Scale.FIT) ajuste le canvas
+     à la largeur en portrait, à la hauteur en paysage, sans déformation */
+  #conteneur{position:fixed;inset:0}
+  #conteneur canvas{display:block;margin:0 auto}
+  .erreur{color:#e2584d;max-width:640px;text-align:center;padding:20px}
+
+  .rotation{
+    position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    background:rgba(27,35,64,.85);border:1px solid #33406e;border-radius:20px;
+    padding:8px 16px;font-size:12px;z-index:9;pointer-events:none;display:none;
+    animation:disparait 6s forwards;
+  }
+  @keyframes disparait{0%,70%{opacity:1}100%{opacity:0}}
+  @media (orientation:portrait){ .rotation{display:block} }
+
+  /* ── manette : superposée en bas de l'écran, pouces de chaque côté ── */
+  .manette{
+    position:fixed;left:0;right:0;bottom:calc(12px + env(safe-area-inset-bottom));
+    display:flex;justify-content:space-between;align-items:flex-end;
+    padding-left:calc(18px + env(safe-area-inset-left));
+    padding-right:calc(18px + env(safe-area-inset-right));
+    pointer-events:none;z-index:5;
+  }
+  .manette > *{pointer-events:auto}
+
+  .socle{
+    position:relative;width:138px;height:138px;border-radius:50%;
+    background:rgba(27,35,64,.5);border:1px solid rgba(77,214,193,.35);
+    backdrop-filter:blur(3px);touch-action:none;
+  }
+  .socle::before,.socle::after{
+    content:'';position:absolute;top:50%;width:9px;height:9px;
+    border-top:2px solid rgba(203,213,240,.3);border-right:2px solid rgba(203,213,240,.3);
+  }
+  .socle::before{left:12px;transform:translateY(-50%) rotate(-135deg)}
+  .socle::after{right:12px;transform:translateY(-50%) rotate(45deg)}
+  .pouce{
+    position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;
+    border-radius:50%;background:rgba(77,214,193,.28);border:2px solid #4dd6c1;
+    transition:background .1s;
+  }
+  .socle.actif .pouce{background:rgba(77,214,193,.5)}
+
+  .pad{display:grid;grid-template-columns:repeat(3,60px);grid-template-rows:repeat(3,60px);gap:2px}
+  .pad button{
+    grid-area:var(--case);
+    width:60px;height:60px;border-radius:50%;
+    background:rgba(27,35,64,.55);border:2px solid currentColor;
+    backdrop-filter:blur(3px);color:#8d9ac4;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font:inherit;line-height:1;touch-action:none;cursor:pointer;
+  }
+  .pad button .signe{font-size:22px}
+  .pad button .nom{font-size:8px;letter-spacing:.06em;margin-top:3px;color:rgba(203,213,240,.65)}
+  .pad button:active{background:rgba(77,90,150,.8)}
+  .b-triangle{--case:1/2/2/3;color:#4dd6c1}
+  .b-carre   {--case:2/1/3/2;color:#e585c8}
+  .b-rond    {--case:2/3/3/4;color:#e2584d}
+  .b-croix   {--case:3/2/4/3;color:#6f9bff}
+
+  @media (max-height:430px){
+    .socle{width:112px;height:112px}
+    .pouce{width:50px;height:50px;margin:-25px 0 0 -25px}
+    .pad{grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px)}
+    .pad button{width:52px;height:52px}
+  }
+</style>
+</head>
+<body>
+<div id="conteneur"></div>
+<div class="rotation">↻ Tourne l'écran, le jeu est plus large que haut</div>
+
+<div class="manette">
+  <div class="socle" id="socle"><div class="pouce" id="pouce"></div></div>
+  <div class="pad">
+    <button class="b-triangle" data-action="retourne"><span class="signe">△</span><span class="nom">RETOURNÉ</span></button>
+    <button class="b-carre"    data-action="poing"><span class="signe">□</span><span class="nom">POING</span></button>
+    <button class="b-rond"     data-action="pied"><span class="signe">○</span><span class="nom">PIED</span></button>
+    <button class="b-croix"    data-action="saut"><span class="signe">✕</span><span class="nom">SAUT</span></button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.90.0/phaser.min.js"></script>
+<script>
+if (typeof Phaser === 'undefined'){
+  document.getElementById('conteneur').innerHTML =
+    '<p class="erreur">Phaser n\'a pas pu être chargé depuis le CDN. Vérifie ta connexion, ' +
+    'ou télécharge phaser.min.js en local et change la balise script.</p>';
+}
+</script>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// RÉGLAGES
+// ─────────────────────────────────────────────────────────────
+const CFG = {
+  gravite:       2200,
+  vitesseSaut:   700,
+  coupureSaut:   220,
+  coyote:        0.10,
+  bufferSaut:    0.12,
+  vitesseMarche: 230,
+  accel:         2000,
+  frein:         2600,
+  controleAir:   0.55,
+  pvJoueur:      3,
+  invincibilite: 0.9,
+  zoneMorte:     0.24,   // part du rayon du joystick ignorée au centre
+};
+
+// Trois coups, trois usages. Tout l'équilibrage du combat est ici.
+const COUPS = {
+  poing:    { duree:0.26, debut:0.05, fin:0.14, portee:24, hauteur:16, dy:-22, degats:1, recul:210, elan: 40, secousse:0.004 },
+  pied:     { duree:0.44, debut:0.13, fin:0.27, portee:34, hauteur:18, dy:-14, degats:2, recul:360, elan:120, secousse:0.009 },
+  retourne: { duree:0.62, debut:0.20, fin:0.40, portee:32, hauteur:22, dy:-18, degats:3, recul:430, elan:  0, secousse:0.013, bilateral:true },
+};
+
+const L = 900, H = 480, SOL_Y = 380, LARGEUR_MONDE = 5600;
+
+const COUL = {
+  sol:0x0a0d1a, solBord:0x39457a, plat:0x16463f, platBord:0x4dd6c1,
+  gi:0xf2e6cf, giOmbre:0xd3c0a0, ceinture:0xff9d2e,
+  peau:0xf0c090, peauOmbre:0xc9a377, cheveux:0x181d30, col:0x2b7d72, botte:0x232a45,
+  monstre:0x7b3f8f, monstreOmbre:0x552a63, monstreOeil:0xffe08a,
+};
+const HANCHE = -19, EPAULE = -30, TETE = -35;
+
+// ─────────────────────────────────────────────────────────────
+// MANETTE TACTILE
+// Chaque bouton et le joystick captent leur propre pointeur :
+// le multi-touch marche donc sans code supplémentaire.
+// ─────────────────────────────────────────────────────────────
+const ENTREE = { axeX:0, saut:false, sautPresse:false, coupPresse:null };
+
+const socle = document.getElementById('socle');
+const pouce = document.getElementById('pouce');
+let pointeurJoystick = null;
+
+function majJoystick(e){
+  const r = socle.getBoundingClientRect();
+  const rayon = r.width / 2;
+  let dx = e.clientX - (r.left + rayon);
+  let dy = e.clientY - (r.top + r.height / 2);
+  const d = Math.hypot(dx, dy);
+  const limite = rayon - 12;
+  if (d > limite){ dx *= limite / d; dy *= limite / d; }
+  pouce.style.transform = `translate(${dx}px, ${dy}px)`;
+  const norm = dx / limite;
+  ENTREE.axeX = Math.abs(norm) < CFG.zoneMorte ? 0 : Math.max(-1, Math.min(1, norm));
+}
+function relacherJoystick(){
+  pointeurJoystick = null;
+  ENTREE.axeX = 0;
+  pouce.style.transform = 'translate(0,0)';
+  socle.classList.remove('actif');
+}
+socle.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  pointeurJoystick = e.pointerId;
+  socle.setPointerCapture(e.pointerId);
+  socle.classList.add('actif');
+  majJoystick(e);
+});
+socle.addEventListener('pointermove', e => { if (e.pointerId === pointeurJoystick) majJoystick(e); });
+for (const ev of ['pointerup','pointercancel','lostpointercapture'])
+  socle.addEventListener(ev, e => { if (e.pointerId === pointeurJoystick) relacherJoystick(); });
+
+for (const b of document.querySelectorAll('.pad button')){
+  const a = b.dataset.action;
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    b.setPointerCapture(e.pointerId);
+    if (a === 'saut'){ ENTREE.saut = true; ENTREE.sautPresse = true; }
+    else ENTREE.coupPresse = a;
+  });
+  const fin = () => { if (a === 'saut') ENTREE.saut = false; };
+  for (const ev of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(ev, fin);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+// clavier de secours pour tester sur un ordinateur — flèches et espace uniquement
+addEventListener('keydown', e => {
+  if (e.code === 'ArrowLeft')  { ENTREE.axeX = -1; e.preventDefault(); }
+  if (e.code === 'ArrowRight') { ENTREE.axeX =  1; e.preventDefault(); }
+  if (e.code === 'Space' && !e.repeat){ ENTREE.saut = true; ENTREE.sautPresse = true; e.preventDefault(); }
+});
+addEventListener('keyup', e => {
+  if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
+  if (e.code === 'Space') ENTREE.saut = false;
+});
+
+// ─────────────────────────────────────────────────────────────
+// SCÈNE
+// ─────────────────────────────────────────────────────────────
+class Combat extends Phaser.Scene {
+  constructor(){ super('combat'); }
+
+  create(){
+    this.phase = 0; this.squash = 0; this.sens = 1;
+    this.coyote = 0; this.buffer = 0;
+    this.attaque = null;
+    this.pv = CFG.pvJoueur; this.invuln = 0;
+    this.vaincus = 0; this.etat = 'jeu';
+    this.eclats = [];
+
+    this.physics.world.setBounds(0, -400, LARGEUR_MONDE, H + 900);
+    // Pas de mur en bas : setCollideWorldBounds sert à empêcher de sortir
+    // par les côtés, mais s'il bloque aussi le bas, on ne tombe jamais
+    // vraiment et le test de chute ne se déclenche pas.
+    this.physics.world.setBoundsCollision(true, true, false, false);
+    this.cameras.main.setBounds(0, 0, LARGEUR_MONDE, H);
+
+    this.fond = this.add.graphics().setScrollFactor(0).setDepth(-10);
+    this.sols = this.add.group();
+    this.plateformes = this.add.group();
+    this.monstres = [];
+
+    this.joueur = this.add.rectangle(120, SOL_Y - 60, 28, 40, 0xffffff, 0);
+    this.physics.add.existing(this.joueur);
+    this.joueur.body.setCollideWorldBounds(true);
+
+    this.gMonstres = this.add.graphics().setDepth(4);
+    this.perso = this.add.graphics().setDepth(5);
+    this.gEclats = this.add.graphics().setDepth(6);
+
+    this.construireNiveau();
+    this.physics.add.collider(this.joueur, this.sols);
+    this.physics.add.collider(this.joueur, this.plateformes);
+    this.cameras.main.startFollow(this.joueur, true, 0.12, 0.1, 0, 60);
+
+    this.hud = this.add.graphics().setScrollFactor(0).setDepth(10);
+    this.hudTexte = this.add.text(22, 52, '',
+      { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'12px', color:'#8d9ac4' })
+      .setScrollFactor(0).setDepth(10);
+    this.hudFin = this.add.text(L/2, H/2 - 30, '',
+      { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'18px', color:'#cbd5f0', align:'center' })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(11);
+  }
+
+  // ── niveau ──────────────────────────────────────────────────
+  creerSol(x, w){
+    const r = this.add.rectangle(x + w/2, SOL_Y + (H - SOL_Y)/2, w, H - SOL_Y, COUL.sol);
+    this.physics.add.existing(r, true);
+    this.sols.add(r);
+    this.add.rectangle(x + w/2, SOL_Y + 2, w, 4, COUL.solBord);
+  }
+  creerPlateforme(x, y, w){
+    const p = this.add.rectangle(x + w/2, y + 7, w, 14, COUL.plat).setStrokeStyle(2, COUL.platBord);
+    this.physics.add.existing(p, true);
+    p.body.checkCollision.down = false;
+    p.body.checkCollision.left = false;
+    p.body.checkCollision.right = false;
+    this.plateformes.add(p);
+  }
+  creerMonstre(x, minX, maxX){
+    const go = this.add.rectangle(x, SOL_Y - 40, 26, 30, 0xffffff, 0);
+    this.physics.add.existing(go);
+    go.body.setCollideWorldBounds(true);
+    this.physics.add.collider(go, this.sols);
+    this.physics.add.collider(go, this.plateformes);
+    this.monstres.push({ go, pv:3, assomme:0, flash:0, dir:-1, minX, maxX, phase:Math.random()*6 });
+  }
+  construireNiveau(){
+    this.creerSol(-200, 900);
+    let x = 700;
+    while (x < LARGEUR_MONDE - 700){
+      const long = 380 + Math.random() * 420;
+      this.creerSol(x, long);
+      if (Math.random() < 0.4)
+        this.creerPlateforme(x + long*0.35, SOL_Y - 105 - Math.random()*25, 120 + Math.random()*70);
+      const nb = 1 + (Math.random() < 0.45 ? 1 : 0);
+      for (let i = 0; i < nb; i++)
+        this.creerMonstre(x + 80 + Math.random()*(long - 160), x + 30, x + long - 30);
+      x += long;
+      if (Math.random() < 0.55) x += 80 + Math.random()*40;
+    }
+    this.creerSol(x, 700);
+    this.finX = x + 560;
+    this.portail = this.add.rectangle(this.finX, SOL_Y - 60, 16, 120, 0xff9d2e, 0.25)
+      .setStrokeStyle(2, COUL.ceinture);
+  }
+
+  // ── combat ──────────────────────────────────────────────────
+  lancerAttaque(type){
+    if (this.attaque) return;
+    this.attaque = { type, t:0, touches:new Set() };
+    const c = COUPS[type];
+    if (c.elan && this.joueur.body.blocked.down) this.joueur.body.setVelocityX(this.sens * c.elan);
+  }
+  zonesAttaque(){
+    const c = COUPS[this.attaque.type];
+    const dirs = c.bilateral ? [1, -1] : [this.sens];
+    return dirs.map(d => {
+      const cx = this.joueur.x + d * (14 + c.portee/2);
+      return new Phaser.Geom.Rectangle(cx - c.portee/2, this.joueur.y + c.dy - c.hauteur/2, c.portee, c.hauteur);
+    });
+  }
+  frapper(m, c){
+    const dir = Math.sign(m.go.x - this.joueur.x) || this.sens;
+    m.pv -= c.degats; m.flash = 0.14; m.assomme = 0.22;
+    m.go.body.setVelocity(dir * c.recul, -160);
+    this.cameras.main.shake(80, c.secousse);
+    this.eclat(m.go.x, m.go.y, dir);
+    if (m.pv <= 0){
+      m.mort = true; this.vaincus++;
+      this.eclat(m.go.x, m.go.y, dir, 14);
+      m.go.destroy();
+    }
+  }
+  eclat(x, y, sens, n = 7){
+    for (let i = 0; i < n; i++)
+      this.eclats.push({ x, y:y-6,
+        vx: sens*(60 + Math.random()*190) + (Math.random()-0.5)*90,
+        vy: -110 + (Math.random()-0.5)*220,
+        vie: 0.28 + Math.random()*0.22, max: 0.5 });
+  }
+  blesser(source){
+    if (this.invuln > 0 || this.etat !== 'jeu') return;
+    this.pv--; this.invuln = CFG.invincibilite;
+    const dir = this.joueur.x < source ? -1 : 1;
+    this.joueur.body.setVelocity(dir * 240, -280);
+    this.cameras.main.shake(140, 0.008);
+    if (this.pv <= 0) this.terminer('Tu es hors de combat');
+  }
+  terminer(titre){
+    this.etat = 'perdu';
+    this.hudFin.setText(titre + '\n' + this.vaincus + ' monstres vaincus\n\n✕ pour recommencer');
+  }
+
+  // ── boucle ──────────────────────────────────────────────────
+  update(temps, deltaMs){
+    const dt = Math.min(0.033, deltaMs / 1000);
+    const b = this.joueur.body;
+
+    if (this.etat !== 'jeu'){
+      if (ENTREE.sautPresse){ ENTREE.sautPresse = false; this.scene.restart(); return; }
+      ENTREE.coupPresse = null;
+      this.majEclats(dt); this.dessinerTout(b);
+      return;
+    }
+
+    const auSol = b.blocked.down || b.touching.down;
+
+    if (ENTREE.coupPresse){ this.lancerAttaque(ENTREE.coupPresse); ENTREE.coupPresse = null; }
+
+    if (this.attaque){
+      const c = COUPS[this.attaque.type];
+      this.attaque.t += dt;
+      if (this.attaque.t >= c.debut && this.attaque.t <= c.fin){
+        const zones = this.zonesAttaque();
+        for (const m of this.monstres){
+          if (m.mort || this.attaque.touches.has(m)) continue;
+          const cible = m.go.getBounds();
+          if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, cible))){
+            this.attaque.touches.add(m);
+            this.frapper(m, c);
+          }
+        }
+      }
+      if (this.attaque.t >= c.duree) this.attaque = null;
+    }
+
+    // déplacement : le joystick est analogique, la vitesse suit son inclinaison
+    const enAttaqueAuSol = this.attaque && auSol;
+    const cible = enAttaqueAuSol ? 0 : ENTREE.axeX * CFG.vitesseMarche;
+    if (Math.abs(ENTREE.axeX) > 0.05 && !enAttaqueAuSol) this.sens = Math.sign(ENTREE.axeX);
+
+    const a = (cible !== 0 ? CFG.accel : CFG.frein) * (auSol ? 1 : CFG.controleAir) * dt;
+    const vx = b.velocity.x;
+    b.setVelocityX(Math.abs(cible - vx) <= a ? cible : vx + Math.sign(cible - vx) * a);
+
+    this.coyote = auSol ? CFG.coyote : Math.max(0, this.coyote - dt);
+    if (ENTREE.sautPresse){ ENTREE.sautPresse = false; this.buffer = CFG.bufferSaut; }
+    this.buffer = Math.max(0, this.buffer - dt);
+    if (this.buffer > 0 && this.coyote > 0){
+      b.setVelocityY(-CFG.vitesseSaut);
+      this.coyote = 0; this.buffer = 0; this.squash = -1;
+    }
+    if (!ENTREE.saut && b.velocity.y < -CFG.coupureSaut) b.setVelocityY(-CFG.coupureSaut);
+
+    if (auSol && !this.auSolAvant && this.vyAvant > 300) this.squash = 1;
+    this.auSolAvant = auSol; this.vyAvant = b.velocity.y;
+    this.squash += (0 - this.squash) * Math.min(1, dt * 12);
+    if (auSol) this.phase += (Math.abs(b.velocity.x) * dt) / 27;
+    this.invuln = Math.max(0, this.invuln - dt);
+
+    this.monstres = this.monstres.filter(m => !m.mort);
+    for (const m of this.monstres){
+      m.flash = Math.max(0, m.flash - dt);
+      m.phase += dt * 5;
+      if (m.assomme > 0) m.assomme -= dt;
+      else {
+        const dx = this.joueur.x - m.go.x;
+        const memeNiveau = Math.abs(this.joueur.y - m.go.y) < 90;
+        let v;
+        if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * 85;
+        else {
+          if (m.go.x < m.minX) m.dir = 1;
+          if (m.go.x > m.maxX) m.dir = -1;
+          v = m.dir * 45;
+        }
+        if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
+        m.go.body.setVelocityX(v);
+      }
+      if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds()))
+        this.blesser(m.go.x);
+      if (m.go.y > H + 200){ m.mort = true; m.go.destroy(); }
+    }
+
+    if (this.joueur.y > H + 40){ this.pv = 0; this.terminer('Tombé dans le vide'); }
+    if (this.joueur.x > this.finX){
+      this.etat = 'perdu';
+      this.hudFin.setText('Zone franchie\n' + this.vaincus + ' monstres vaincus\n\n✕ pour recommencer');
+    }
+
+    this.majEclats(dt);
+    this.dessinerTout(b);
+  }
+
+  majEclats(dt){
+    for (const e of this.eclats){ e.vie -= dt; e.vy += 900*dt; e.x += e.vx*dt; e.y += e.vy*dt; }
+    this.eclats = this.eclats.filter(e => e.vie > 0);
+  }
+
+  // ── rendu ───────────────────────────────────────────────────
+  dessinerTout(b){
+    this.dessinerFond(this.cameras.main.scrollX);
+    this.dessinerMonstres();
+    this.dessinerPerso(b);
+    this.dessinerEclats();
+    this.dessinerHud();
+  }
+  dessinerHud(){
+    const g = this.hud; g.clear();
+    for (let i = 0; i < CFG.pvJoueur; i++){
+      g.fillStyle(i < this.pv ? 0xe2584d : 0x2a3355, 1);
+      const x = 26 + i*26, y = 32;
+      g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
+      g.fillTriangle(x-11, y, x+11, y, x, y+12);
+    }
+    this.hudTexte.setText('MONSTRES ' + this.vaincus);
+  }
+  dessinerEclats(){
+    const g = this.gEclats; g.clear();
+    for (const e of this.eclats){
+      const k = Math.max(0, e.vie / e.max);
+      g.fillStyle(0xffb347, k);
+      g.fillRect(e.x-2, e.y-2, 3 + k*2, 3 + k*2);
+    }
+  }
+  dessinerFond(sx){
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0x0d1120, 0x0d1120, 0x2a2350, 0x2a2350, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    g.fillStyle(0xffb347, 0.14); g.fillCircle(730, 140, 70);
+    this.collines(g, sx*0.12, 0x1d2547, 42, 250);
+    this.pylones(g, sx*0.35, 0x151c38);
+    this.collines(g, sx*0.55, 0x111730, 26, 320);
+  }
+  collines(g, off, couleur, amp, base){
+    const pts = [{x:0,y:H}];
+    for (let x = 0; x <= L; x += 8){
+      const wx = x + off;
+      pts.push({ x, y: base + Math.sin(wx*0.0035)*amp + Math.sin(wx*0.011)*amp*0.35 });
+    }
+    pts.push({x:L,y:H});
+    g.fillStyle(couleur, 1); g.fillPoints(pts, true);
+  }
+  pylones(g, off, couleur){
+    const pas = 165, debut = Math.floor(off/pas) - 1;
+    g.fillStyle(couleur, 1);
+    for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+      const h = 70 + Math.abs(Math.sin(i*12.9898))*95;
+      const w = 30 + Math.abs(Math.cos(i*4.1414))*24;
+      g.fillRect(i*pas - off, SOL_Y - h, w, h);
+    }
+  }
+  dessinerMonstres(){
+    const g = this.gMonstres; g.clear();
+    for (const m of this.monstres){
+      const x = m.go.x, y = m.go.y + 15;
+      const dandine = Math.sin(m.phase) * 2;
+      const corps = m.flash > 0 ? 0xffffff : COUL.monstre;
+      g.fillStyle(0x000000, 0.25); g.fillEllipse(x, y+1, 26, 6);
+      g.fillStyle(m.flash > 0 ? 0xffffff : COUL.monstreOmbre, 1);
+      g.fillEllipse(x-6, y-3, 8, 8); g.fillEllipse(x+6, y-3, 8, 8);
+      g.fillStyle(corps, 1);
+      g.fillEllipse(x, y-15+dandine, 26, 26);
+      g.fillTriangle(x-11, y-22+dandine, x-5, y-34+dandine, x-2, y-21+dandine);
+      g.fillTriangle(x+11, y-22+dandine, x+5, y-34+dandine, x+2, y-21+dandine);
+      const vers = Math.sign(this.joueur.x - x) || 1;
+      g.fillStyle(COUL.monstreOeil, 1);
+      g.fillCircle(x + vers*3 - 4, y-17+dandine, 3);
+      g.fillCircle(x + vers*3 + 4, y-17+dandine, 3);
+      g.fillStyle(0x1a0f22, 1);
+      g.fillCircle(x + vers*4 - 4, y-17+dandine, 1.4);
+      g.fillCircle(x + vers*4 + 4, y-17+dandine, 1.4);
+      if (m.pv < 3){
+        g.fillStyle(0x2a3355, 1); g.fillRect(x-13, y-44, 26, 4);
+        g.fillStyle(0xe2584d, 1); g.fillRect(x-13, y-44, 26 * (m.pv/3), 4);
+      }
+    }
+  }
+  dessinerPerso(b){
+    const g = this.perso; g.clear();
+    const auSol = b.blocked.down || b.touching.down;
+    const t = this.phase;
+    const marche = Math.abs(b.velocity.x) > 20;
+    let pieds, mains, inclinaison = -0.03;
+
+    if (this.attaque){
+      const c = COUPS[this.attaque.type];
+      const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
+      const ext = Math.sin(Math.PI * Math.min(1, p * 1.2));
+      if (this.attaque.type === 'poing'){
+        mains = [[-6 - ext*3, EPAULE + 9], [4 + ext*22, EPAULE + 2 - ext*3]];
+        pieds = [[-9 - ext*2, 0], [7 + ext*2, 0]];
+        inclinaison = -0.05 - ext*0.06;
+      } else if (this.attaque.type === 'pied'){
+        mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
+        pieds = [[-6, 0], [6 + ext*26, -6 - ext*14]];
+        inclinaison = 0.04 + ext*0.12;
+      } else {
+        // coup retourné : la jambe balaie de l'arrière vers l'avant, d'où la portée des deux côtés
+        const balai = -1 + 2*p;
+        mains = [[-12*balai, EPAULE + 4], [12*balai, EPAULE + 6]];
+        pieds = [[-4, 0], [balai*30, -14 - Math.sin(Math.PI*p)*8]];
+        inclinaison = -0.10 + p*0.20;
+      }
+    } else if (!auSol){
+      pieds = b.velocity.y < 0 ? [[-7,-3],[7,-9]] : [[-8,-7],[9,-1]];
+      mains = b.velocity.y < 0 ? [[-6,EPAULE+7],[8,EPAULE-9]] : [[-9,EPAULE-5],[8,EPAULE+5]];
+    } else if (marche){
+      pieds = []; mains = [];
+      for (const dec of [Math.PI, 0]){
+        const p = t + dec;
+        pieds.push([-Math.cos(p)*9, Math.sin(p) > 0 ? -Math.sin(p)*10 : 0]);
+        mains.push([Math.cos(p)*8, EPAULE + 13 - Math.max(0, Math.sin(p))*4]);
+      }
+      inclinaison = -0.06;
+    } else {
+      const souffle = Math.sin(this.time.now / 420) * 1.2;
+      pieds = [[-6, 0], [6, 0]];
+      mains = [[-7, EPAULE + 11 + souffle], [8, EPAULE + 9 + souffle]];
+    }
+
+    if (auSol){ g.fillStyle(0x000000, 0.28); g.fillEllipse(0, 1, 28, 7); }
+
+    this.membre(g, -1, EPAULE, mains[0][0], mains[0][1], 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
+    this.membre(g, -1, HANCHE, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
+    g.fillStyle(0x171d33, 1); g.fillEllipse(pieds[0][0]+1, pieds[0][1]-1.5, 10, 6);
+
+    g.fillStyle(COUL.gi, 1);
+    g.fillPoints([{x:-7,y:EPAULE},{x:7,y:EPAULE},{x:6,y:HANCHE+1},{x:-6,y:HANCHE+1}], true);
+    g.lineStyle(2.4, COUL.col, 1);
+    g.beginPath(); g.moveTo(-3, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
+    g.beginPath(); g.moveTo(5, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
+    g.fillStyle(COUL.ceinture, 1);
+    g.fillRect(-7, HANCHE-3, 14, 4);
+    g.fillRect(-7.5, HANCHE-3, 3, 8);
+
+    this.membre(g, 1, HANCHE, pieds[1][0], pieds[1][1], 9.5, 9.5, -1, COUL.gi, COUL.gi, 9, 7.5);
+    g.fillStyle(COUL.botte, 1); g.fillEllipse(pieds[1][0]+1, pieds[1][1]-1.5, 11, 6.4);
+    this.membre(g, 1, EPAULE, mains[1][0], mains[1][1], 8, 8, 1, COUL.gi, COUL.peau, 7.5, 5.5);
+    g.fillStyle(COUL.ceinture, 1); g.fillCircle(mains[1][0], mains[1][1], 2.6);
+
+    const hx = 1, hy = TETE;
+    g.fillStyle(COUL.cheveux, 1);
+    const pointes = [[-7,3],[-9,-3],[-13,-7],[-7,-6],[-10,-13],[-3,-8],[0,-15],[3,-7],[9,-11],[6,-3],[10,-4],[7,1]];
+    g.fillPoints(pointes.map(p => ({ x: hx + p[0], y: hy + p[1] })), true);
+    g.fillStyle(COUL.peau, 1); g.fillCircle(hx+1, hy, 5.6);
+    g.fillStyle(COUL.cheveux, 1);
+    g.fillEllipse(hx+0.5, hy-4.6, 11.6, 5);
+    g.fillRect(hx+2.5, hy-1.6, 2, 2.6);
+
+    g.setPosition(this.joueur.x, this.joueur.y + 20);
+    g.setRotation(this.sens * inclinaison);
+    g.setScale(this.sens * (1 + this.squash*0.22), 1 - this.squash*0.22);
+    g.setAlpha(this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
+  }
+  membre(g, hx, hy, tx, ty, l1, l2, sens, c1, c2, e1, e2){
+    const dx = tx-hx, dy = ty-hy;
+    const d = Math.min(Math.hypot(dx, dy), l1+l2-0.001) || 0.001;
+    const a = Math.atan2(dy, dx);
+    const c = (d*d + l1*l1 - l2*l2) / (2*d*l1);
+    const ang = a + sens*Math.acos(Math.max(-1, Math.min(1, c)));
+    const kx = hx + Math.cos(ang)*l1, ky = hy + Math.sin(ang)*l1;
+    g.lineStyle(e1, c1, 1);
+    g.beginPath(); g.moveTo(hx, hy); g.lineTo(kx, ky); g.strokePath();
+    g.lineStyle(e2, c2, 1);
+    g.beginPath(); g.moveTo(kx, ky); g.lineTo(tx, ty); g.strokePath();
+    g.fillStyle(c1, 1); g.fillCircle(hx, hy, e1/2); g.fillCircle(kx, ky, e1/2);
+    g.fillStyle(c2, 1); g.fillCircle(tx, ty, e2/2);
+  }
+}
+
+if (typeof Phaser !== 'undefined'){
+  const partie = new Phaser.Game({
+    type: Phaser.AUTO,
+    width: L, height: H,
+    parent: 'conteneur',
+    backgroundColor: '#0d1120',
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    physics: { default:'arcade', arcade: { gravity:{ y: CFG.gravite }, debug:false } },
+    scene: Combat,
+  });
+
+  // iOS ne recalcule pas toujours la taille du parent tout de suite après
+  // une rotation : on force un rafraîchissement peu après l'événement.
+  const rafraichir = () => setTimeout(() => partie.scale.refresh(), 120);
+  addEventListener('orientationchange', rafraichir);
+  addEventListener('resize', rafraichir);
+}
+</script>
+</body>
+</html>
