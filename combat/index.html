@@ -19,7 +19,10 @@
     font-display:block;
   }
 
-  *{box-sizing:border-box}
+  /* touch-action ne s'hérite pas : le poser sur body ne protège pas
+     l'écran-titre ni la manette, qui sont des enfants. Sur * il couvre
+     tout d'un coup — plus de zoom au double-tap ni au pincement. */
+  *{box-sizing:border-box;touch-action:none}
   html,body{height:100%;overflow:hidden;overscroll-behavior:none}
   body{
     margin:0;background:#0d1120;color:#cbd5f0;
@@ -80,7 +83,7 @@
     margin-top:30px;font-family:'Arcade',ui-monospace,monospace;
     font-size:clamp(8px,2.4vw,12px);letter-spacing:.06em;line-height:1.7;
     color:#0d1120;background:#4dd6c1;border:0;border-radius:999px;
-    padding:15px 24px;cursor:pointer;touch-action:manipulation;
+    padding:15px 24px;cursor:pointer;
     animation:halo 1.7s ease-in-out infinite;
   }
   .demarrer:active{transform:translateY(3px)}
@@ -240,6 +243,25 @@ function generateur(s){
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// ZOOM
+// iOS ignore user-scalable=no depuis iOS 10, et touch-action n'a été
+// suivi qu'à partir de Safari 13. On coupe donc aussi à la main les
+// deux gestes qui zooment : le double-tap et le pincement.
+// ─────────────────────────────────────────────────────────────
+for (const ev of ['gesturestart','gesturechange','gestureend'])
+  addEventListener(ev, e => e.preventDefault(), { passive:false });
+
+let dernierTap = 0;
+addEventListener('touchend', e => {
+  // deux appuis rapprochés = double-tap : on annule le second
+  if (e.timeStamp - dernierTap < 350) e.preventDefault();
+  dernierTap = e.timeStamp;
+}, { passive:false });
+
+// le jeu n'écoute que pointerdown, annuler le double-clic ne coûte rien
+addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 
 // ─────────────────────────────────────────────────────────────
 // MANETTE TACTILE
