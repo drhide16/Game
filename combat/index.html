@@ -86,7 +86,21 @@
     padding:15px 24px;cursor:pointer;
     animation:halo 1.7s ease-in-out infinite;
   }
+  .aide{margin-top:18px;font-size:9px;letter-spacing:.18em;color:#6a76a4}
+  .record{margin-top:8px;font-size:10px;letter-spacing:.2em;color:#ffd98a;min-height:13px}
   .demarrer:active{transform:translateY(3px)}
+
+  /* coupe-son : au-dessus de l'écran-titre, donc toujours atteignable */
+  .son{
+    position:fixed;z-index:21;
+    top:calc(12px + env(safe-area-inset-top));right:calc(14px + env(safe-area-inset-right));
+    width:38px;height:38px;border-radius:50%;
+    background:rgba(27,35,64,.55);border:1px solid rgba(203,213,240,.25);
+    backdrop-filter:blur(3px);color:#cbd5f0;
+    font:15px/1 ui-monospace,monospace;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .son.coupe{color:#4a5478;border-color:rgba(203,213,240,.12)}
   @keyframes halo{
     0%,100%{box-shadow:0 5px 0 #26857a, 0 0 10px rgba(77,214,193,.2)}
     50%    {box-shadow:0 5px 0 #26857a, 0 0 32px rgba(77,214,193,.6)}
@@ -113,6 +127,13 @@
   }
   .socle::before{left:12px;transform:translateY(-50%) rotate(-135deg)}
   .socle::after{right:12px;transform:translateY(-50%) rotate(45deg)}
+  /* haut et bas comptent maintenant : sauter et s'accroupir */
+  .socle .fl{
+    position:absolute;left:50%;width:9px;height:9px;
+    border-top:2px solid rgba(203,213,240,.3);border-right:2px solid rgba(203,213,240,.3);
+  }
+  .socle .fl.h{top:12px;transform:translateX(-50%) rotate(-45deg)}
+  .socle .fl.b{bottom:12px;transform:translateX(-50%) rotate(135deg)}
   .pouce{
     position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;
     border-radius:50%;background:rgba(77,214,193,.28);border:2px solid #4dd6c1;
@@ -134,12 +155,12 @@
   .pad button .nom{font-size:7px;letter-spacing:.03em;margin-top:3px;color:rgba(203,213,240,.65)}
   .pad button:active{background:rgba(77,90,150,.8)}
   .b-triangle{--case:1/2/2/3;color:#4dd6c1}
-  /* le bracelet transforme △ en tir laser : le bouton change de couleur */
-  .pad button.laser{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
-  .pad button.laser .nom{color:rgba(233,182,255,.9)}
   .b-carre   {--case:2/1/3/2;color:#e585c8}
   .b-rond    {--case:2/3/3/4;color:#e2584d}
-  .b-croix   {--case:3/2/4/3;color:#6f9bff}
+  /* ✕ n'est plus le saut : c'est le bouton d'arme, vide tant qu'on n'a rien trouvé */
+  .b-croix   {--case:3/2/4/3;color:#4a5478}
+  .b-croix.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
+  .b-croix.armee .nom{color:rgba(233,182,255,.9)}
 
   @media (max-height:430px){
     .socle{width:112px;height:112px}
@@ -147,10 +168,13 @@
     .pad{grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px)}
     .pad button{width:52px;height:52px}
     /* en paysage sur téléphone la hauteur manque : on resserre le titre */
-    .logo .l1,.logo .l2{font-size:clamp(20px,5.2vw,36px)}
-    .presente{margin-top:14px}
-    .glyphes{margin-top:16px;font-size:16px}
-    .demarrer{margin-top:18px;padding:12px 20px}
+    .logo .l1,.logo .l2{font-size:clamp(18px,4.6vw,32px)}
+    .presente{margin-top:12px}
+    .jeu{margin-top:6px}
+    .glyphes{margin-top:12px;font-size:15px}
+    .aide{margin-top:10px}
+    .record{margin-top:5px}
+    .demarrer{margin-top:12px;padding:11px 20px}
   }
 </style>
 </head>
@@ -163,16 +187,23 @@
   <div class="presente">PRÉSENTE</div>
   <div class="jeu">COMBAT</div>
   <div class="glyphes"><i class="g1">△</i><i class="g2">□</i><i class="g3">○</i><i class="g4">✕</i></div>
+  <div class="aide">↑ SAUTER &nbsp;·&nbsp; ↓ S'ACCROUPIR</div>
+  <div class="record" id="record"></div>
   <button class="demarrer" id="demarrer">APPUIE POUR<br>COMMENCER</button>
 </div>
 
+<button class="son" id="son" title="Couper le son">♪</button>
+
 <div class="manette">
-  <div class="socle" id="socle"><div class="pouce" id="pouce"></div></div>
+  <div class="socle" id="socle">
+    <i class="fl h"></i><i class="fl b"></i>
+    <div class="pouce" id="pouce"></div>
+  </div>
   <div class="pad">
     <button class="b-triangle" data-action="retourne"><span class="signe">△</span><span class="nom">RETOURNÉ</span></button>
     <button class="b-carre"    data-action="poing"><span class="signe">□</span><span class="nom">POING</span></button>
     <button class="b-rond"     data-action="pied"><span class="signe">○</span><span class="nom">PIED</span></button>
-    <button class="b-croix"    data-action="saut"><span class="signe">✕</span><span class="nom">SAUT</span></button>
+    <button class="b-croix"    data-action="arme"><span class="signe">✕</span><span class="nom">ARME</span></button>
   </div>
 </div>
 
@@ -198,25 +229,49 @@ const CFG = {
   coyote:        0.10,
   bufferSaut:    0.12,
   vitesseMarche: 230,
+  vitesseAccroupi: 78,
   accel:         2000,
   frein:         2600,
   controleAir:   0.55,
   pvJoueur:      5,
   invincibilite: 0.9,
-  invulnRenais:  1.8,    // le temps de souffler quand on réapparaît
-  zoneMorte:     0.24,   // part du rayon du joystick ignorée au centre
-  laserParBracelet: 12,
-  laserMax:      40,
-  chanceCoeur:   0.35,   // proportion de monstres vaincus qui lâchent un cœur
+  invulnRenais:  1.8,   // le temps de souffler quand on réapparaît
+  zoneMorte:     0.24,  // part du rayon du joystick ignorée au centre
+  seuilHaut:     0.45,  // au-delà, le joystick vers le haut = saut
+  seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
+  chanceCoeur:   0.35,  // proportion de monstres vaincus qui lâchent un cœur
 };
 
-// Trois coups, trois usages, plus le laser que débloque le bracelet.
-// Tout l'équilibrage du combat est ici.
+// Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
+// son dessin : c'est le seul repère qui reste juste quand il s'accroupit.
+const PIEDS = 20;          // décalage du bas de la boîte par rapport à son centre
+const DECALAGE_ACCROUPI = 16;  // accroupi, tous les coups descendent d'autant
+
 const COUPS = {
-  poing:    { duree:0.26, debut:0.05, fin:0.14, portee: 24, hauteur:16, dy:-22, degats:1, recul:210, elan: 40, secousse:0.004 },
-  pied:     { duree:0.44, debut:0.13, fin:0.27, portee: 34, hauteur:18, dy:-14, degats:2, recul:360, elan:120, secousse:0.009 },
-  retourne: { duree:0.62, debut:0.20, fin:0.40, portee: 32, hauteur:22, dy:-18, degats:3, recul:430, elan:  0, secousse:0.013, bilateral:true },
-  laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, hauteur:14, dy:-24, degats:3, recul:300, elan:  0, secousse:0.011 },
+  poing:    { duree:0.26, debut:0.05, fin:0.14, portee: 26, hauteur:32, dy:-40, degats:1, recul:210, elan: 40, secousse:0.004, son:'poing' },
+  // dy remonté à -34 : à -26 le pied passait sous le drone et ne pouvait
+  // jamais l'atteindre, alors que debout il est censé être vulnérable
+  pied:     { duree:0.44, debut:0.13, fin:0.27, portee: 36, hauteur:34, dy:-34, degats:2, recul:360, elan:120, secousse:0.009, son:'pied' },
+  retourne: { duree:0.62, debut:0.20, fin:0.40, portee: 34, hauteur:40, dy:-34, degats:3, recul:430, elan:  0, secousse:0.013, son:'retourne', bilateral:true },
+  // armes
+  laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, hauteur:20, dy:-40, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
+  pistolet: { duree:0.20, debut:0.05, fin:0.06, portee:  0, hauteur: 0, dy:-40, degats:2, recul:180, elan:0, secousse:0.005, son:'pistolet', tir:{ nb:1, vitesse:820, dispersion:0 } },
+  fusil:    { duree:0.52, debut:0.07, fin:0.08, portee:  0, hauteur: 0, dy:-38, degats:2, recul:320, elan:0, secousse:0.014, son:'fusil',    tir:{ nb:3, vitesse:700, dispersion:0.13 } },
+};
+
+// Ce qu'on trouve dans les caisses. Toutes se branchent sur le bouton ✕.
+const ARMES = {
+  laser:    { nom:'LASER',    munitions:14, couleur:0xc46bff, clair:0xe9b6ff },
+  pistolet: { nom:'PISTOLET', munitions:24, couleur:0xffd166, clair:0xfff0c2 },
+  fusil:    { nom:'FUSIL',    munitions:10, couleur:0xff7b54, clair:0xffc2ac },
+};
+
+// Trois bestioles, trois façons de les atteindre. C'est ce qui donne
+// son intérêt à l'accroupissement : chacune n'est vulnérable qu'à une hauteur.
+const MONSTRES = {
+  baveux:  { pv:3, taille:[26,30], vitesse:85, patrouille:45, degats:1, hauteurVol:0,  faible:'bas',  vole:false },
+  drone:   { pv:2, taille:[26,24], vitesse:110, patrouille:60, degats:1, hauteurVol:46, faible:'haut', vole:true  },
+  colosse: { pv:6, taille:[38,44], vitesse:52, patrouille:30, degats:2, hauteurVol:0,  faible:null,   vole:false },
 };
 
 const L = 900, H = 480, SOL_Y = 380, LARGEUR_MONDE = 7600;
@@ -226,9 +281,11 @@ const COUL = {
   solVille:0x121018, solBordVille:0xe0a44c,
   gi:0xf2e6cf, giOmbre:0xd3c0a0, ceinture:0xff9d2e,
   peau:0xf0c090, peauOmbre:0xc9a377, cheveux:0x181d30, col:0x2b7d72, botte:0x232a45,
-  monstre:0x7b3f8f, monstreOmbre:0x552a63, monstreOeil:0xffe08a,
+  baveux:0x7b3f8f, baveuxOmbre:0x552a63, baveuxOeil:0xffe08a,
+  drone:0x39406b, droneOmbre:0x252a4a, droneOeil:0xff5e5e,
+  colosse:0x8f4a3f, colosseOmbre:0x612f28, colosseOeil:0xffe08a,
   bois:0x8a5a2b, boisClair:0xb07a3e, boisOmbre:0x6d4420,
-  laser:0xc46bff, laserClair:0xe9b6ff,
+  blinde:0x6f9bff,   // éclat bleu quand on frappe à la mauvaise hauteur
 };
 const HANCHE = -19, EPAULE = -30, TETE = -35;
 
@@ -245,6 +302,96 @@ function generateur(s){
 }
 
 // ─────────────────────────────────────────────────────────────
+// RECORD
+// ─────────────────────────────────────────────────────────────
+const CLE_RECORD = 'martin-games-combat';
+function lireRecord(){
+  try {
+    const r = JSON.parse(localStorage.getItem(CLE_RECORD));
+    if (r && typeof r.monstres === 'number') return r;
+  } catch (e) { /* navigation privée : on joue sans record */ }
+  return { monstres:0, metres:0 };
+}
+function ecrireRecord(r){
+  try { localStorage.setItem(CLE_RECORD, JSON.stringify(r)); } catch (e) {}
+}
+function afficherRecord(){
+  const r = lireRecord(), el = document.getElementById('record');
+  if (el) el.textContent = (r.monstres || r.metres)
+    ? 'RECORD  ' + r.monstres + ' MONSTRES  ·  ' + r.metres + ' M' : '';
+}
+afficherRecord();
+
+// ─────────────────────────────────────────────────────────────
+// SON
+// Tout est synthétisé à la volée : aucun fichier à charger, donc le
+// jeu tient toujours en un seul fichier. iOS n'autorise l'audio qu'après
+// un geste — d'où le démarrage au moment où on lance la partie.
+// ─────────────────────────────────────────────────────────────
+const SON = {
+  ctx:null, sortie:null, actif:true,
+  demarrer(){
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.sortie = this.ctx.createGain();
+    this.sortie.gain.value = 0.26;
+    this.sortie.connect(this.ctx.destination);
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  note(forme, f0, f1, duree, vol, delai){
+    if (!this.ctx || !this.actif) return;
+    const t = this.ctx.currentTime + (delai || 0);
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = forme;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + duree);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + duree);
+    o.connect(g); g.connect(this.sortie);
+    o.start(t); o.stop(t + duree + 0.03);
+  },
+  souffle(duree, vol, freq, q){
+    if (!this.ctx || !this.actif) return;
+    const t = this.ctx.currentTime;
+    const n = Math.max(1, Math.floor(this.ctx.sampleRate * duree));
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random()*2 - 1) * (1 - i/n);
+    const s = this.ctx.createBufferSource(); s.buffer = buf;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
+    const g = this.ctx.createGain(); g.gain.value = vol;
+    s.connect(f); f.connect(g); g.connect(this.sortie);
+    s.start(t);
+  },
+  jouer(nom){
+    if (!this.ctx || !this.actif) return;
+    switch (nom){
+      case 'poing':    this.souffle(0.09, 0.45, 900, 1.2); this.note('sine', 180, 90, 0.09, 0.22); break;
+      case 'pied':     this.souffle(0.16, 0.5, 520, 1.0);  this.note('sine', 150, 60, 0.16, 0.26); break;
+      case 'retourne': this.souffle(0.28, 0.4, 380, 0.8);  this.note('triangle', 230, 70, 0.3, 0.24); break;
+      case 'laser':    this.note('sawtooth', 1500, 190, 0.3, 0.3); this.note('square', 720, 95, 0.3, 0.14); break;
+      case 'pistolet': this.souffle(0.07, 0.55, 1800, 1.4); this.note('square', 620, 160, 0.08, 0.22); break;
+      case 'fusil':    this.souffle(0.22, 0.7, 700, 0.6);   this.note('sawtooth', 260, 70, 0.22, 0.3); break;
+      case 'touche':   this.souffle(0.11, 0.5, 1500, 0.9);  this.note('square', 330, 130, 0.09, 0.2); break;
+      case 'blinde':   this.note('square', 1200, 900, 0.11, 0.22); this.souffle(0.09, 0.3, 2600, 2); break;
+      case 'vaincu':   this.note('square', 420, 80, 0.34, 0.24); this.souffle(0.3, 0.32, 700, 0.6); break;
+      case 'saut':     this.note('sine', 320, 640, 0.12, 0.2); break;
+      case 'caisse':   this.souffle(0.2, 0.55, 300, 0.5); this.note('triangle', 150, 60, 0.18, 0.2); break;
+      case 'coeur':    this.note('sine', 660, 660, 0.1, 0.24); this.note('sine', 990, 990, 0.14, 0.24, 0.09); break;
+      case 'arme':     [440,660,880,1320].forEach((f,i) => this.note('square', f, f, 0.1, 0.16, i*0.06)); break;
+      case 'degat':    this.note('sawtooth', 300, 70, 0.3, 0.28); this.souffle(0.2, 0.32, 400, 0.7); break;
+      case 'mort':     [440,330,262,196].forEach((f,i) => this.note('triangle', f, f, 0.26, 0.22, i*0.16)); break;
+      case 'gagne':    [523,659,784,1047].forEach((f,i) => this.note('square', f, f, 0.2, 0.2, i*0.11)); break;
+      case 'vide':     this.note('square', 160, 120, 0.06, 0.12); break;
+    }
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
 // ZOOM
 // iOS ignore user-scalable=no depuis iOS 10, et touch-action n'a été
 // suivi qu'à partir de Safari 13. On coupe donc aussi à la main les
@@ -255,20 +402,23 @@ for (const ev of ['gesturestart','gesturechange','gestureend'])
 
 let dernierTap = 0;
 addEventListener('touchend', e => {
-  // deux appuis rapprochés = double-tap : on annule le second
   if (e.timeStamp - dernierTap < 350) e.preventDefault();
   dernierTap = e.timeStamp;
 }, { passive:false });
 
-// le jeu n'écoute que pointerdown, annuler le double-clic ne coûte rien
 addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 
 // ─────────────────────────────────────────────────────────────
 // MANETTE TACTILE
-// Chaque bouton et le joystick captent leur propre pointeur :
-// le multi-touch marche donc sans code supplémentaire.
+// Le joystick porte les quatre directions : gauche/droite pour marcher,
+// haut pour sauter, bas pour s'accroupir. Le bouton ✕ est donc libre
+// et sert d'arme. Chaque bouton capte son propre pointeur, le
+// multi-touch marche sans code supplémentaire.
 // ─────────────────────────────────────────────────────────────
-const ENTREE = { axeX:0, saut:false, sautPresse:false, coupPresse:null };
+const ENTREE = {
+  axeX:0, saut:false, sautPresse:false, accroupi:false,
+  coupPresse:null, armePresse:false, validePresse:false,
+};
 
 const socle = document.getElementById('socle');
 const pouce = document.getElementById('pouce');
@@ -283,12 +433,18 @@ function majJoystick(e){
   const limite = rayon - 12;
   if (d > limite){ dx *= limite / d; dy *= limite / d; }
   pouce.style.transform = `translate(${dx}px, ${dy}px)`;
-  const norm = dx / limite;
-  ENTREE.axeX = Math.abs(norm) < CFG.zoneMorte ? 0 : Math.max(-1, Math.min(1, norm));
+
+  const nx = dx / limite, ny = dy / limite;
+  ENTREE.axeX = Math.abs(nx) < CFG.zoneMorte ? 0 : Math.max(-1, Math.min(1, nx));
+
+  const versLeHaut = ny < -CFG.seuilHaut;
+  if (versLeHaut && !ENTREE.saut){ ENTREE.sautPresse = true; ENTREE.validePresse = true; }
+  ENTREE.saut = versLeHaut;
+  ENTREE.accroupi = ny > CFG.seuilBas;
 }
 function relacherJoystick(){
   pointeurJoystick = null;
-  ENTREE.axeX = 0;
+  ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.accroupi = false;
   pouce.style.transform = 'translate(0,0)';
   socle.classList.remove('actif');
 }
@@ -308,42 +464,55 @@ for (const b of document.querySelectorAll('.pad button')){
   b.addEventListener('pointerdown', e => {
     e.preventDefault();
     b.setPointerCapture(e.pointerId);
-    if (a === 'saut'){ ENTREE.saut = true; ENTREE.sautPresse = true; }
+    if (a === 'arme') ENTREE.armePresse = true;
     else ENTREE.coupPresse = a;
+    ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
-  const fin = () => { if (a === 'saut') ENTREE.saut = false; };
-  for (const ev of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(ev, fin);
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-// le bouton △ change de rôle dès qu'on ramasse un bracelet
-const boutonSpecial = document.querySelector('.b-triangle');
-function majBoutonSpecial(charges){
-  const signe = boutonSpecial.querySelector('.signe');
-  const nom   = boutonSpecial.querySelector('.nom');
-  if (charges > 0){
-    boutonSpecial.classList.add('laser');
-    signe.textContent = '⚡';
-    nom.textContent = 'LASER ' + charges;
+// le bouton ✕ affiche l'arme en cours et ses munitions
+const boutonArme = document.querySelector('.b-croix');
+function majBoutonArme(arme, munitions){
+  const signe = boutonArme.querySelector('.signe');
+  const nom   = boutonArme.querySelector('.nom');
+  if (arme){
+    boutonArme.classList.add('armee');
+    signe.textContent = '✦';
+    nom.textContent = ARMES[arme].nom + ' ' + munitions;
   } else {
-    boutonSpecial.classList.remove('laser');
-    signe.textContent = '△';
-    nom.textContent = 'RETOURNÉ';
+    boutonArme.classList.remove('armee');
+    signe.textContent = '✕';
+    nom.textContent = 'ARME';
   }
 }
+
+const boutonSon = document.getElementById('son');
+boutonSon.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  SON.actif = !SON.actif;
+  boutonSon.classList.toggle('coupe', !SON.actif);
+  boutonSon.textContent = SON.actif ? '♪' : '✕';
+  if (SON.actif) SON.jouer('coeur');
+});
 
 // clavier de secours pour tester sur un ordinateur
 addEventListener('keydown', e => {
   if (e.code === 'ArrowLeft')  { ENTREE.axeX = -1; e.preventDefault(); }
   if (e.code === 'ArrowRight') { ENTREE.axeX =  1; e.preventDefault(); }
-  if (e.code === 'Space' && !e.repeat){ ENTREE.saut = true; ENTREE.sautPresse = true; e.preventDefault(); }
-  if (e.code === 'KeyA') ENTREE.coupPresse = 'poing';
-  if (e.code === 'KeyZ') ENTREE.coupPresse = 'pied';
-  if (e.code === 'KeyE') ENTREE.coupPresse = 'retourne';
+  if (e.code === 'ArrowDown')  { ENTREE.accroupi = true; e.preventDefault(); }
+  if ((e.code === 'ArrowUp' || e.code === 'Space') && !e.repeat){
+    ENTREE.saut = true; ENTREE.sautPresse = true; ENTREE.validePresse = true; e.preventDefault();
+  }
+  if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.validePresse = true; }
+  if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.validePresse = true; }
+  if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.validePresse = true; }
+  if (e.code === 'KeyR') { ENTREE.armePresse = true; ENTREE.validePresse = true; }
 });
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
-  if (e.code === 'Space') ENTREE.saut = false;
+  if (e.code === 'ArrowDown') ENTREE.accroupi = false;
+  if (e.code === 'ArrowUp' || e.code === 'Space') ENTREE.saut = false;
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -359,10 +528,12 @@ class Combat extends Phaser.Scene {
     this.attaque = null;
     this.pv = CFG.pvJoueur; this.invuln = 0;
     this.vaincus = 0; this.morts = 0; this.etat = 'jeu';
-    this.laser = 0;
-    this.eclats = []; this.objets = []; this.caisses = [];
+    this.accroupi = false;
+    this.arme = null; this.munitions = 0;
+    this.astuceBas = false; this.astuceHaut = false;
+    this.eclats = []; this.objets = []; this.caisses = []; this.tirs = [];
     this.msg = null;
-    majBoutonSpecial(0);
+    majBoutonArme(null, 0);
 
     this.physics.world.setBounds(0, -400, LARGEUR_MONDE, H + 900);
     // Pas de mur en bas : setCollideWorldBounds sert à empêcher de sortir
@@ -387,7 +558,7 @@ class Combat extends Phaser.Scene {
     this.gObjets   = this.add.graphics().setDepth(4.5);
     this.perso     = this.add.graphics().setDepth(5);
     this.gEclats   = this.add.graphics().setDepth(6);
-    this.gLaser    = this.add.graphics().setDepth(7);
+    this.gTirs     = this.add.graphics().setDepth(7);
 
     this.construireNiveau();
     this.physics.add.collider(this.joueur, this.sols);
@@ -419,12 +590,22 @@ class Combat extends Phaser.Scene {
 
   // ── niveau ──────────────────────────────────────────────────
   creerSol(x, w){
-    const u = this.urbain(x + w/2);
-    const r = this.add.rectangle(x + w/2, SOL_Y + (H - SOL_Y)/2, w, H - SOL_Y,
-      this.melange(COUL.sol, COUL.solVille, u));
+    // un seul corps physique, mais le visuel est tranché en lamelles dans
+    // la zone de transition : sinon la couleur saute d'un bloc à l'autre
+    const r = this.add.rectangle(x + w/2, SOL_Y + (H - SOL_Y)/2, w, H - SOL_Y, 0, 0);
     this.physics.add.existing(r, true);
     this.sols.add(r);
-    this.add.rectangle(x + w/2, SOL_Y + 2, w, 4, this.melange(COUL.solBord, COUL.solBordVille, u));
+
+    const uG = this.urbain(x), uD = this.urbain(x + w);
+    const pas = (uG === uD) ? w : 40;
+    for (let sx = x; sx < x + w; sx += pas){
+      const lw = Math.min(pas, x + w - sx);
+      const u = this.urbain(sx + lw/2);
+      this.add.rectangle(sx + lw/2, SOL_Y + (H - SOL_Y)/2, lw + 1, H - SOL_Y,
+        this.melange(COUL.sol, COUL.solVille, u)).setDepth(-5);
+      this.add.rectangle(sx + lw/2, SOL_Y + 2, lw + 1, 4,
+        this.melange(COUL.solBord, COUL.solBordVille, u)).setDepth(-4);
+    }
   }
   creerPlateforme(x, y, w){
     const p = this.add.rectangle(x + w/2, y + 7, w, 14, COUL.plat).setStrokeStyle(2, COUL.platBord);
@@ -434,20 +615,35 @@ class Combat extends Phaser.Scene {
     p.body.checkCollision.right = false;
     this.plateformes.add(p);
   }
-  creerMonstre(x, minX, maxX){
-    const go = this.add.rectangle(x, SOL_Y - 40, 26, 30, 0xffffff, 0);
+  creerMonstre(type, x, minX, maxX){
+    const d = MONSTRES[type];
+    const y = SOL_Y - d.taille[1]/2 - d.hauteurVol;
+    const go = this.add.rectangle(x, y, d.taille[0], d.taille[1], 0xffffff, 0);
     this.physics.add.existing(go);
     go.body.setCollideWorldBounds(true);
-    this.physics.add.collider(go, this.sols);
-    this.physics.add.collider(go, this.plateformes);
-    this.physics.add.collider(go, this.grCaisses);
-    this.monstres.push({ go, pv:3, assomme:0, flash:0, dir:-1, minX, maxX, phase:this.alea()*6 });
+    if (d.vole){
+      go.body.setAllowGravity(false);
+    } else {
+      this.physics.add.collider(go, this.sols);
+      this.physics.add.collider(go, this.plateformes);
+      this.physics.add.collider(go, this.grCaisses);
+    }
+    this.monstres.push({
+      go, type, def:d, pv:d.pv, pvMax:d.pv, assomme:0, flash:0, blinde:0,
+      dir:-1, minX, maxX, baseY:y, phase:this.alea()*6,
+    });
   }
   creerCaisse(x){
     const c = this.add.rectangle(x, SOL_Y - 15, 30, 30, 0xffffff, 0);
     this.physics.add.existing(c, true);
     this.grCaisses.add(c);
     this.caisses.push({ go:c, pv:2, flash:0 });
+  }
+  // la campagne est au baveux, la ville au drone, le colosse traîne partout
+  tirerType(x){
+    const u = this.urbain(x), r = this.alea();
+    if (r < 0.14) return 'colosse';
+    return r < 0.14 + (1 - u) * 0.86 ? 'baveux' : 'drone';
   }
   construireNiveau(){
     this.creerSol(-200, 900);
@@ -458,9 +654,10 @@ class Combat extends Phaser.Scene {
       if (this.alea() < 0.4)
         this.creerPlateforme(x + long*0.35, SOL_Y - 105 - this.alea()*25, 120 + this.alea()*70);
       const nb = 1 + (this.alea() < 0.45 ? 1 : 0);
-      for (let i = 0; i < nb; i++)
-        this.creerMonstre(x + 80 + this.alea()*(long - 160), x + 30, x + long - 30);
-      // une caisse à casser un peu moins d'une fois sur deux
+      for (let i = 0; i < nb; i++){
+        const mx = x + 80 + this.alea()*(long - 160);
+        this.creerMonstre(this.tirerType(mx), mx, x + 30, x + long - 30);
+      }
       if (this.alea() < 0.45) this.creerCaisse(x + 60 + this.alea()*(long - 120));
       x += long;
       if (this.alea() < 0.55) x += 80 + this.alea()*40;
@@ -474,61 +671,121 @@ class Combat extends Phaser.Scene {
   // ── combat ──────────────────────────────────────────────────
   lancerAttaque(type){
     if (this.attaque) return;
-    if (type === 'laser'){
-      if (this.laser <= 0) type = 'retourne';
-      else { this.laser--; majBoutonSpecial(this.laser); }
-    }
-    this.attaque = { type, t:0, touches:new Set() };
     const c = COUPS[type];
-    if (type === 'laser') this.cameras.main.shake(120, c.secousse);
-    if (c.elan && this.joueur.body.blocked.down) this.joueur.body.setVelocityX(this.sens * c.elan);
+    this.attaque = { type, t:0, bas:this.accroupi, touches:new Set() };
+    SON.jouer(c.son);
+    if (c.secousse) this.cameras.main.shake(90, c.secousse);
+    if (c.tir) this.tirer(c);
+    if (c.elan && this.joueur.body.blocked.down && !this.accroupi)
+      this.joueur.body.setVelocityX(this.sens * c.elan);
+  }
+  utiliserArme(){
+    if (!this.arme){ SON.jouer('vide'); return; }
+    if (this.attaque) return;
+    this.munitions--;
+    this.lancerAttaque(this.arme);
+    if (this.munitions <= 0){
+      this.arme = null; this.munitions = 0;
+      this.message('ARME VIDE');
+    }
+    majBoutonArme(this.arme, this.munitions);
+  }
+  tirer(c){
+    const y = this.hauteurCoup(c);
+    for (let i = 0; i < c.tir.nb; i++){
+      const ec = (c.tir.nb === 1) ? 0 : (i - (c.tir.nb-1)/2) * c.tir.dispersion;
+      this.tirs.push({
+        x: this.joueur.x + this.sens*16, y,
+        vx: this.sens * c.tir.vitesse * Math.cos(ec),
+        vy: c.tir.vitesse * Math.sin(ec),
+        degats: c.degats, recul: c.recul, bas: this.attaque.bas,
+        couleur: ARMES[this.arme] ? ARMES[this.arme].couleur : 0xffd166,
+        vie: 1.1,
+      });
+    }
+  }
+  // hauteur d'un coup, mesurée depuis les pieds comme le dessin du perso
+  hauteurCoup(c){
+    return this.joueur.y + PIEDS + c.dy + (this.accroupi ? DECALAGE_ACCROUPI : 0);
   }
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
+    if (!c.portee) return [];
     const dirs = c.bilateral ? [1, -1] : [this.sens];
+    const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
     return dirs.map(d => {
       const cx = this.joueur.x + d * (14 + c.portee/2);
-      return new Phaser.Geom.Rectangle(cx - c.portee/2, this.joueur.y + c.dy - c.hauteur/2, c.portee, c.hauteur);
+      return new Phaser.Geom.Rectangle(cx - c.portee/2, y - c.hauteur/2, c.portee, c.hauteur);
     });
   }
-  frapper(m, c){
-    const dir = Math.sign(m.go.x - this.joueur.x) || this.sens;
-    m.pv -= c.degats; m.flash = 0.14; m.assomme = 0.22;
-    m.go.body.setVelocity(dir * c.recul, -160);
-    this.cameras.main.shake(80, c.secousse);
+  // le cœur de la mécanique : chaque bestiole n'est vulnérable qu'à une hauteur
+  vulnerable(m, bas){
+    if (m.def.faible === 'bas')  return bas;
+    if (m.def.faible === 'haut') return !bas;
+    return true;
+  }
+  frapper(m, degats, recul, bas, sourceX){
+    if (!this.vulnerable(m, bas)){
+      m.blinde = 0.18;
+      SON.jouer('blinde');
+      this.eclat(m.go.x, m.go.y, 0, 3, COUL.blinde);
+      if (m.def.faible === 'bas' && !this.astuceBas){
+        this.astuceBas = true;
+        this.message("ACCROUPIS-TOI POUR TOUCHER LE VIOLET");
+      } else if (m.def.faible === 'haut' && !this.astuceHaut){
+        this.astuceHaut = true;
+        this.message('LE DRONE VOLE TROP HAUT, RELÈVE-TOI');
+      }
+      return;
+    }
+    const dir = Math.sign(m.go.x - sourceX) || this.sens;
+    m.pv -= degats; m.flash = 0.14; m.assomme = 0.22;
+    m.go.body.setVelocity(dir * recul, m.def.vole ? 0 : -160);
+    SON.jouer('touche');
     this.eclat(m.go.x, m.go.y, dir);
     if (m.pv <= 0){
       m.mort = true; this.vaincus++;
+      SON.jouer('vaincu');
       this.eclat(m.go.x, m.go.y, dir, 14);
       if (this.alea() < CFG.chanceCoeur) this.creerObjet(m.go.x, m.go.y - 8, 'coeur');
       m.go.destroy();
     }
   }
-  casser(k, c){
-    k.pv -= c.degats; k.flash = 0.12;
-    this.cameras.main.shake(70, c.secousse * 0.7);
+  casser(k, degats){
+    k.pv -= degats; k.flash = 0.12;
+    SON.jouer('caisse');
     this.eclat(k.go.x, k.go.y - 4, this.sens, 5);
     if (k.pv <= 0){
       k.casse = true;
       this.eclat(k.go.x, k.go.y - 4, this.sens, 16);
-      this.creerObjet(k.go.x, k.go.y - 8, this.alea() < 0.42 ? 'bracelet' : 'coeur');
+      this.creerObjet(k.go.x, k.go.y - 8, this.butin());
       k.go.destroy();
     }
   }
-  eclat(x, y, sens, n = 7){
+  butin(){
+    const r = this.alea();
+    if (r < 0.20) return 'laser';
+    if (r < 0.38) return 'pistolet';
+    if (r < 0.50) return 'fusil';
+    return 'coeur';
+  }
+  eclat(x, y, sens, n, couleur){
+    n = n || 7;
     for (let i = 0; i < n; i++)
-      this.eclats.push({ x, y:y-6,
+      this.eclats.push({ x, y:y-6, couleur: couleur || 0xffb347,
         vx: sens*(60 + this.alea()*190) + (this.alea()-0.5)*90,
         vy: -110 + (this.alea()-0.5)*220,
         vie: 0.28 + this.alea()*0.22, max: 0.5 });
   }
-  blesser(source){
+  blesser(source, degats){
     if (this.invuln > 0 || this.etat !== 'jeu') return;
-    this.pv--; this.invuln = CFG.invincibilite;
+    this.pv -= degats;
+    this.invuln = CFG.invincibilite;
     const dir = this.joueur.x < source ? -1 : 1;
     this.joueur.body.setVelocity(dir * 240, -280);
     this.cameras.main.shake(140, 0.008);
-    if (this.pv <= 0) this.terminer('Tu es hors de combat');
+    SON.jouer('degat');
+    if (this.pv <= 0){ this.pv = 0; this.terminer('Tu es hors de combat'); }
   }
 
   // ── objets ──────────────────────────────────────────────────
@@ -547,11 +804,15 @@ class Combat extends Phaser.Scene {
     if (o.type === 'coeur'){
       if (this.pv >= CFG.pvJoueur) return;   // on laisse le cœur au sol pour plus tard
       this.pv++;
+      SON.jouer('coeur');
       this.message('+1 ♥');
     } else {
-      this.laser = Math.min(CFG.laserMax, this.laser + CFG.laserParBracelet);
-      majBoutonSpecial(this.laser);
-      this.message('BRACELET LASER  —  △ devient ⚡ ×' + this.laser);
+      const a = ARMES[o.type];
+      this.munitions = (this.arme === o.type ? this.munitions : 0) + a.munitions;
+      this.arme = o.type;
+      majBoutonArme(this.arme, this.munitions);
+      SON.jouer('arme');
+      this.message(a.nom + '  —  ✕ POUR TIRER  ×' + this.munitions);
     }
     o.pris = true;
     o.go.destroy();
@@ -559,10 +820,20 @@ class Combat extends Phaser.Scene {
   message(txt){ this.msg = { t:0 }; this.hudMsg.setText(txt).setAlpha(1); }
 
   // ── mort et réapparition ────────────────────────────────────
+  majRecord(){
+    const r = lireRecord();
+    const m = Math.max(0, Math.round((this.joueur.x - 120) / 10));
+    const n = { monstres: Math.max(r.monstres, this.vaincus), metres: Math.max(r.metres, m) };
+    if (n.monstres !== r.monstres || n.metres !== r.metres) ecrireRecord(n);
+    return n;
+  }
   terminer(titre){
     this.etat = 'perdu';
     this.morts++;
-    this.hudFin.setText(titre + '\n' + this.vaincus + ' monstres vaincus\n\n✕ pour repartir d\'ici');
+    SON.jouer('mort');
+    const r = this.majRecord();
+    this.hudFin.setText(titre + '\n' + this.vaincus + ' monstres vaincus'
+      + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour repartir d\'ici');
   }
   // On ne relance pas la scène : le monde, les monstres déjà vaincus et
   // les caisses ouvertes restent en l'état. On repose seulement le joueur
@@ -576,18 +847,17 @@ class Combat extends Phaser.Scene {
     this.squash = 0;
     this.joueur.body.reset(this.checkpoint.x, this.checkpoint.y);
     this.cameras.main.centerOn(this.checkpoint.x, this.checkpoint.y);
-    // les monstres collés au point de réapparition sont repoussés,
-    // sinon on remeurt dans la seconde
     for (const m of this.monstres){
       if (Math.abs(m.go.x - this.checkpoint.x) < 160){
         const d = Math.sign(m.go.x - this.checkpoint.x) || 1;
-        m.go.body.setVelocity(d * 280, -220);
+        m.go.body.setVelocity(d * 280, m.def.vole ? 0 : -220);
         m.assomme = 0.6;
       }
     }
   }
   nouvellePartie(){
     GRAINE = (Math.random() * 1e9) | 0;
+    afficherRecord();
     this.scene.restart();
   }
 
@@ -597,43 +867,44 @@ class Combat extends Phaser.Scene {
     const b = this.joueur.body;
 
     if (this.etat !== 'jeu'){
-      if (ENTREE.sautPresse){
-        ENTREE.sautPresse = false;
+      if (ENTREE.validePresse){
+        ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
+        ENTREE.armePresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
         else this.nouvellePartie();
         return;
       }
-      ENTREE.coupPresse = null;
+      ENTREE.coupPresse = null; ENTREE.armePresse = false; ENTREE.sautPresse = false;
       this.majEclats(dt); this.dessinerTout(b);
       return;
     }
+    ENTREE.validePresse = false;
 
     const auSol = b.blocked.down || b.touching.down;
+    this.accroupi = ENTREE.accroupi && auSol;
 
-    if (ENTREE.coupPresse){
-      // le bracelet remplace le coup retourné par le laser tant qu'il a des charges
-      const type = (ENTREE.coupPresse === 'retourne' && this.laser > 0) ? 'laser' : ENTREE.coupPresse;
-      this.lancerAttaque(type);
-      ENTREE.coupPresse = null;
-    }
+    if (ENTREE.armePresse){ ENTREE.armePresse = false; this.utiliserArme(); }
+    if (ENTREE.coupPresse){ this.lancerAttaque(ENTREE.coupPresse); ENTREE.coupPresse = null; }
 
     if (this.attaque){
       const c = COUPS[this.attaque.type];
       this.attaque.t += dt;
       if (this.attaque.t >= c.debut && this.attaque.t <= c.fin){
         const zones = this.zonesAttaque();
-        for (const m of this.monstres){
-          if (m.mort || this.attaque.touches.has(m)) continue;
-          if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, m.go.getBounds()))){
-            this.attaque.touches.add(m);
-            this.frapper(m, c);
+        if (zones.length){
+          for (const m of this.monstres){
+            if (m.mort || this.attaque.touches.has(m)) continue;
+            if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, m.go.getBounds()))){
+              this.attaque.touches.add(m);
+              this.frapper(m, c.degats, c.recul, this.attaque.bas, this.joueur.x);
+            }
           }
-        }
-        for (const k of this.caisses){
-          if (k.casse || this.attaque.touches.has(k)) continue;
-          if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, k.go.getBounds()))){
-            this.attaque.touches.add(k);
-            this.casser(k, c);
+          for (const k of this.caisses){
+            if (k.casse || this.attaque.touches.has(k)) continue;
+            if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, k.go.getBounds()))){
+              this.attaque.touches.add(k);
+              this.casser(k, c.degats);
+            }
           }
         }
       }
@@ -641,9 +912,10 @@ class Combat extends Phaser.Scene {
     }
 
     // déplacement : le joystick est analogique, la vitesse suit son inclinaison
-    const enAttaqueAuSol = this.attaque && auSol;
-    const cible = enAttaqueAuSol ? 0 : ENTREE.axeX * CFG.vitesseMarche;
-    if (Math.abs(ENTREE.axeX) > 0.05 && !enAttaqueAuSol) this.sens = Math.sign(ENTREE.axeX);
+    const bloque = this.attaque && auSol && !COUPS[this.attaque.type].tir;
+    const vMax = this.accroupi ? CFG.vitesseAccroupi : CFG.vitesseMarche;
+    const cible = bloque ? 0 : ENTREE.axeX * vMax;
+    if (Math.abs(ENTREE.axeX) > 0.05 && !bloque) this.sens = Math.sign(ENTREE.axeX);
 
     const a = (cible !== 0 ? CFG.accel : CFG.frein) * (auSol ? 1 : CFG.controleAir) * dt;
     const vx = b.velocity.x;
@@ -652,9 +924,11 @@ class Combat extends Phaser.Scene {
     this.coyote = auSol ? CFG.coyote : Math.max(0, this.coyote - dt);
     if (ENTREE.sautPresse){ ENTREE.sautPresse = false; this.buffer = CFG.bufferSaut; }
     this.buffer = Math.max(0, this.buffer - dt);
+    // accroupi, on ne saute pas : le joystick ne peut pas être en haut et en bas
     if (this.buffer > 0 && this.coyote > 0){
       b.setVelocityY(-CFG.vitesseSaut);
       this.coyote = 0; this.buffer = 0; this.squash = -1;
+      SON.jouer('saut');
     }
     if (!ENTREE.saut && b.velocity.y < -CFG.coupureSaut) b.setVelocityY(-CFG.coupureSaut);
 
@@ -670,28 +944,8 @@ class Combat extends Phaser.Scene {
       this.checkpoint.y = this.joueur.y;
     }
 
-    this.monstres = this.monstres.filter(m => !m.mort);
-    for (const m of this.monstres){
-      m.flash = Math.max(0, m.flash - dt);
-      m.phase += dt * 5;
-      if (m.assomme > 0) m.assomme -= dt;
-      else {
-        const dx = this.joueur.x - m.go.x;
-        const memeNiveau = Math.abs(this.joueur.y - m.go.y) < 90;
-        let v;
-        if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * 85;
-        else {
-          if (m.go.x < m.minX) m.dir = 1;
-          if (m.go.x > m.maxX) m.dir = -1;
-          v = m.dir * 45;
-        }
-        if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
-        m.go.body.setVelocityX(v);
-      }
-      if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds()))
-        this.blesser(m.go.x);
-      if (m.go.y > H + 200){ m.mort = true; m.go.destroy(); }
-    }
+    this.majMonstres(dt);
+    this.majTirs(dt);
 
     for (const k of this.caisses) k.flash = Math.max(0, k.flash - dt);
     this.caisses = this.caisses.filter(k => !k.casse);
@@ -706,18 +960,78 @@ class Combat extends Phaser.Scene {
 
     if (this.msg){
       this.msg.t += dt;
-      this.hudMsg.setAlpha(Math.max(0, 1 - this.msg.t / 1.8));
-      if (this.msg.t > 1.8) this.msg = null;
+      this.hudMsg.setAlpha(Math.max(0, 1 - this.msg.t / 2.2));
+      if (this.msg.t > 2.2) this.msg = null;
     }
 
     if (this.joueur.y > H + 40) this.terminer('Tombé dans le vide');
     if (this.joueur.x > this.finX){
       this.etat = 'gagne';
-      this.hudFin.setText('Zone franchie\n' + this.vaincus + ' monstres vaincus\n\n✕ pour un nouveau niveau');
+      SON.jouer('gagne');
+      const r = this.majRecord();
+      this.hudFin.setText('Zone franchie\n' + this.vaincus + ' monstres vaincus'
+        + '\nrecord ' + r.monstres + '\n\n↑ pour un nouveau niveau');
     }
 
     this.majEclats(dt);
     this.dessinerTout(b);
+  }
+
+  majMonstres(dt){
+    this.monstres = this.monstres.filter(m => !m.mort);
+    for (const m of this.monstres){
+      m.flash  = Math.max(0, m.flash - dt);
+      m.blinde = Math.max(0, m.blinde - dt);
+      m.phase += dt * 5;
+      if (m.assomme > 0) m.assomme -= dt;
+      else {
+        const dx = this.joueur.x - m.go.x;
+        const memeNiveau = Math.abs(this.joueur.y - m.go.y) < 110;
+        let v;
+        if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse;
+        else {
+          if (m.go.x < m.minX) m.dir = 1;
+          if (m.go.x > m.maxX) m.dir = -1;
+          v = m.dir * m.def.patrouille;
+        }
+        if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
+        m.go.body.setVelocityX(v);
+        // le drone ne tombe pas : il revient toujours à sa hauteur de vol
+        if (m.def.vole){
+          const vise = m.baseY + Math.sin(m.phase * 0.7) * 7;
+          m.go.body.setVelocityY((vise - m.go.y) * 4);
+        }
+      }
+      if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds()))
+        this.blesser(m.go.x, m.def.degats);
+      if (m.go.y > H + 200){ m.mort = true; m.go.destroy(); }
+    }
+  }
+
+  majTirs(dt){
+    for (const t of this.tirs){
+      t.vie -= dt;
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      if (t.vie <= 0){ t.fini = true; continue; }
+      const boite = new Phaser.Geom.Rectangle(t.x - 5, t.y - 3, 10, 6);
+      for (const m of this.monstres){
+        if (m.mort) continue;
+        if (Phaser.Geom.Intersects.RectangleToRectangle(boite, m.go.getBounds())){
+          this.frapper(m, t.degats, t.recul, t.bas, t.x - t.vx * 0.01);
+          t.fini = true; break;
+        }
+      }
+      if (t.fini) continue;
+      for (const k of this.caisses){
+        if (k.casse) continue;
+        if (Phaser.Geom.Intersects.RectangleToRectangle(boite, k.go.getBounds())){
+          this.casser(k, t.degats);
+          t.fini = true; break;
+        }
+      }
+    }
+    this.tirs = this.tirs.filter(t => !t.fini);
   }
 
   majEclats(dt){
@@ -733,7 +1047,7 @@ class Combat extends Phaser.Scene {
     this.dessinerObjets();
     this.dessinerPerso(b);
     this.dessinerEclats();
-    this.dessinerLaser();
+    this.dessinerTirs();
     this.dessinerHud();
   }
   dessinerHud(){
@@ -745,7 +1059,8 @@ class Combat extends Phaser.Scene {
       g.fillTriangle(x-11, y, x+11, y, x, y+12);
     }
     let t = 'MONSTRES ' + this.vaincus;
-    if (this.laser > 0) t += '   ⚡ ' + this.laser;
+    if (this.arme) t += '   ' + ARMES[this.arme].nom + ' ' + this.munitions;
+    if (this.accroupi) t += '   ACCROUPI';
     if (this.morts > 0) t += '   K.O. ' + this.morts;
     this.hudTexte.setText(t);
   }
@@ -753,23 +1068,30 @@ class Combat extends Phaser.Scene {
     const g = this.gEclats; g.clear();
     for (const e of this.eclats){
       const k = Math.max(0, e.vie / e.max);
-      g.fillStyle(0xffb347, k);
+      g.fillStyle(e.couleur, k);
       g.fillRect(e.x-2, e.y-2, 3 + k*2, 3 + k*2);
     }
   }
-  dessinerLaser(){
-    const g = this.gLaser; g.clear();
-    if (!this.attaque || this.attaque.type !== 'laser') return;
-    const c = COUPS.laser;
-    const k = 1 - Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
-    const y  = this.joueur.y + c.dy;
-    const x0 = this.joueur.x + this.sens * 12;
-    const x1 = this.joueur.x + this.sens * (14 + c.portee);
-    const g0 = Math.min(x0, x1), w = Math.abs(x1 - x0);
-    g.fillStyle(COUL.laser, 0.18 * k);      g.fillRect(g0, y - 12*k, w, 24*k);
-    g.fillStyle(COUL.laserClair, 0.55 * k); g.fillRect(g0, y -  5*k, w, 10*k);
-    g.fillStyle(0xffffff, 0.9 * k);         g.fillRect(g0, y -  2*k, w,  4*k);
-    g.fillStyle(0xffffff, k); g.fillCircle(x0, y, 7*k);
+  dessinerTirs(){
+    const g = this.gTirs; g.clear();
+    // le laser est un trait instantané, pas un projectile
+    if (this.attaque && COUPS[this.attaque.type].faisceau){
+      const c = COUPS[this.attaque.type];
+      const k = 1 - Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
+      const y  = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
+      const x0 = this.joueur.x + this.sens * 12;
+      const x1 = this.joueur.x + this.sens * (14 + c.portee);
+      const g0 = Math.min(x0, x1), w = Math.abs(x1 - x0);
+      g.fillStyle(0xc46bff, 0.18 * k);  g.fillRect(g0, y - 12*k, w, 24*k);
+      g.fillStyle(0xe9b6ff, 0.55 * k);  g.fillRect(g0, y -  5*k, w, 10*k);
+      g.fillStyle(0xffffff, 0.9 * k);   g.fillRect(g0, y -  2*k, w,  4*k);
+      g.fillStyle(0xffffff, k); g.fillCircle(x0, y, 7*k);
+    }
+    for (const t of this.tirs){
+      g.fillStyle(t.couleur, 0.25); g.fillCircle(t.x, t.y, 7);
+      g.fillStyle(t.couleur, 1);    g.fillRect(t.x - 5, t.y - 2, 10, 4);
+      g.fillStyle(0xffffff, 0.9);   g.fillRect(t.x - 2, t.y - 1, 4, 2);
+    }
   }
   dessinerFond(sx){
     const g = this.fond; g.clear();
@@ -844,38 +1166,71 @@ class Combat extends Phaser.Scene {
         g.fillTriangle(x-9, y, x+9, y, x, y+10);
         g.fillStyle(0xff9d9d, 0.85); g.fillCircle(x-4, y-5, 1.8);
       } else {
-        g.fillStyle(COUL.laser, 0.2); g.fillCircle(x, y, 16);
-        g.lineStyle(5, COUL.laser, 1);      g.strokeCircle(x, y, 8);
-        g.lineStyle(2, COUL.laserClair, 1); g.strokeCircle(x, y, 8);
-        g.fillStyle(0xffffff, 0.9); g.fillCircle(x, y - 8, 2.6);
+        const a = ARMES[o.type];
+        g.fillStyle(a.couleur, 0.2); g.fillCircle(x, y, 16);
+        g.lineStyle(5, a.couleur, 1); g.strokeCircle(x, y, 8);
+        g.lineStyle(2, a.clair, 1);   g.strokeCircle(x, y, 8);
+        g.fillStyle(0xffffff, 0.9);   g.fillCircle(x, y - 8, 2.6);
       }
     }
   }
   dessinerMonstres(){
     const g = this.gMonstres; g.clear();
     for (const m of this.monstres){
-      const x = m.go.x, y = m.go.y + 15;
-      const dandine = Math.sin(m.phase) * 2;
-      const corps = m.flash > 0 ? 0xffffff : COUL.monstre;
-      g.fillStyle(0x000000, 0.25); g.fillEllipse(x, y+1, 26, 6);
-      g.fillStyle(m.flash > 0 ? 0xffffff : COUL.monstreOmbre, 1);
-      g.fillEllipse(x-6, y-3, 8, 8); g.fillEllipse(x+6, y-3, 8, 8);
-      g.fillStyle(corps, 1);
-      g.fillEllipse(x, y-15+dandine, 26, 26);
-      g.fillTriangle(x-11, y-22+dandine, x-5, y-34+dandine, x-2, y-21+dandine);
-      g.fillTriangle(x+11, y-22+dandine, x+5, y-34+dandine, x+2, y-21+dandine);
-      const vers = Math.sign(this.joueur.x - x) || 1;
-      g.fillStyle(COUL.monstreOeil, 1);
-      g.fillCircle(x + vers*3 - 4, y-17+dandine, 3);
-      g.fillCircle(x + vers*3 + 4, y-17+dandine, 3);
-      g.fillStyle(0x1a0f22, 1);
-      g.fillCircle(x + vers*4 - 4, y-17+dandine, 1.4);
-      g.fillCircle(x + vers*4 + 4, y-17+dandine, 1.4);
-      if (m.pv < 3){
-        g.fillStyle(0x2a3355, 1); g.fillRect(x-13, y-44, 26, 4);
-        g.fillStyle(0xe2584d, 1); g.fillRect(x-13, y-44, 26 * (m.pv/3), 4);
+      if (m.type === 'drone') this.dessinerDrone(g, m);
+      else this.dessinerBrute(g, m);
+      // barre de vie commune
+      if (m.pv < m.pvMax){
+        const x = m.go.x, y = m.go.y - m.def.taille[1]/2 - 12;
+        g.fillStyle(0x2a3355, 1); g.fillRect(x-13, y, 26, 4);
+        g.fillStyle(0xe2584d, 1); g.fillRect(x-13, y, 26 * (m.pv/m.pvMax), 4);
       }
     }
+  }
+  // baveux et colosse partagent la même silhouette, à l'échelle près
+  dessinerBrute(g, m){
+    const gros = m.type === 'colosse';
+    const e = gros ? 1.45 : 1;
+    const x = m.go.x, y = m.go.y + m.def.taille[1]/2;
+    const dandine = Math.sin(m.phase) * 2;
+    const eclaire = m.flash > 0 ? 0xffffff : (m.blinde > 0 ? COUL.blinde : null);
+    const corps = eclaire || (gros ? COUL.colosse : COUL.baveux);
+    const ombre = eclaire || (gros ? COUL.colosseOmbre : COUL.baveuxOmbre);
+    g.fillStyle(0x000000, 0.25); g.fillEllipse(x, y+1, 26*e, 6*e);
+    g.fillStyle(ombre, 1);
+    g.fillEllipse(x-6*e, y-3*e, 8*e, 8*e); g.fillEllipse(x+6*e, y-3*e, 8*e, 8*e);
+    g.fillStyle(corps, 1);
+    g.fillEllipse(x, y-15*e+dandine, 26*e, 26*e);
+    g.fillTriangle(x-11*e, y-22*e+dandine, x-5*e, y-34*e+dandine, x-2*e, y-21*e+dandine);
+    g.fillTriangle(x+11*e, y-22*e+dandine, x+5*e, y-34*e+dandine, x+2*e, y-21*e+dandine);
+    const vers = Math.sign(this.joueur.x - x) || 1;
+    g.fillStyle(gros ? COUL.colosseOeil : COUL.baveuxOeil, 1);
+    g.fillCircle(x + vers*3 - 4*e, y-17*e+dandine, 3*e);
+    g.fillCircle(x + vers*3 + 4*e, y-17*e+dandine, 3*e);
+    g.fillStyle(0x1a0f22, 1);
+    g.fillCircle(x + vers*4 - 4*e, y-17*e+dandine, 1.4*e);
+    g.fillCircle(x + vers*4 + 4*e, y-17*e+dandine, 1.4*e);
+  }
+  dessinerDrone(g, m){
+    const x = m.go.x, y = m.go.y;
+    const flotte = Math.sin(m.phase) * 2;
+    const eclaire = m.flash > 0 ? 0xffffff : (m.blinde > 0 ? COUL.blinde : null);
+    const corps = eclaire || COUL.drone;
+    // ombre portée au sol, très étalée : on voit qu'il vole
+    g.fillStyle(0x000000, 0.18); g.fillEllipse(x, SOL_Y - 3, 26, 5);
+    g.fillStyle(eclaire || COUL.droneOmbre, 1);
+    g.fillRoundedRect(x-15, y-4+flotte, 30, 9, 4);
+    g.fillStyle(corps, 1);
+    g.fillRoundedRect(x-13, y-13+flotte, 26, 20, 7);
+    // visière
+    const vers = Math.sign(this.joueur.x - x) || 1;
+    g.fillStyle(0x11142a, 1); g.fillRoundedRect(x-9, y-9+flotte, 18, 7, 3);
+    g.fillStyle(COUL.droneOeil, 1); g.fillRect(x - 3 + vers*3, y-8+flotte, 7, 3);
+    // hélices : deux traits qui battent
+    const bat = Math.sin(m.phase * 6) * 5;
+    g.lineStyle(2, eclaire || COUL.droneOmbre, 0.9);
+    g.beginPath(); g.moveTo(x-16-bat, y-15+flotte); g.lineTo(x-6+bat, y-15+flotte); g.strokePath();
+    g.beginPath(); g.moveTo(x+6-bat, y-15+flotte); g.lineTo(x+16+bat, y-15+flotte); g.strokePath();
   }
   dessinerPerso(b){
     const g = this.perso; g.clear();
@@ -883,6 +1238,8 @@ class Combat extends Phaser.Scene {
     const t = this.phase;
     const marche = Math.abs(b.velocity.x) > 20;
     let pieds, mains, inclinaison = -0.03;
+    // accroupi, tout le corps descend : c'est ce tassement qu'on voit à l'écran
+    const tasse = this.accroupi ? 9 : 0;
 
     if (this.attaque){
       const c = COUPS[this.attaque.type];
@@ -896,13 +1253,13 @@ class Combat extends Phaser.Scene {
         mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
         pieds = [[-6, 0], [6 + ext*26, -6 - ext*14]];
         inclinaison = 0.04 + ext*0.12;
-      } else if (this.attaque.type === 'laser'){
-        // bras tendu, poignet en avant : le faisceau part du bracelet
-        mains = [[-8 + ext*2, EPAULE + 8], [10 + ext*14, EPAULE + 6]];
+      } else if (c.faisceau || c.tir){
+        // bras tendu, arme en avant
+        mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
         pieds = [[-9, 0], [8, 0]];
         inclinaison = -0.04 - ext*0.03;
       } else {
-        // coup retourné : la jambe balaie de l'arrière vers l'avant, d'où la portée des deux côtés
+        // coup retourné : la jambe balaie de l'arrière vers l'avant
         const balai = -1 + 2*p;
         mains = [[-12*balai, EPAULE + 4], [12*balai, EPAULE + 6]];
         pieds = [[-4, 0], [balai*30, -14 - Math.sin(Math.PI*p)*8]];
@@ -911,6 +1268,10 @@ class Combat extends Phaser.Scene {
     } else if (!auSol){
       pieds = b.velocity.y < 0 ? [[-7,-3],[7,-9]] : [[-8,-7],[9,-1]];
       mains = b.velocity.y < 0 ? [[-6,EPAULE+7],[8,EPAULE-9]] : [[-9,EPAULE-5],[8,EPAULE+5]];
+    } else if (this.accroupi){
+      pieds = [[-10, 0], [9, 0]];
+      mains = [[-8, EPAULE + 15], [9, EPAULE + 14]];
+      inclinaison = -0.10;
     } else if (marche){
       pieds = []; mains = [];
       for (const dec of [Math.PI, 0]){
@@ -925,33 +1286,37 @@ class Combat extends Phaser.Scene {
       mains = [[-7, EPAULE + 11 + souffle], [8, EPAULE + 9 + souffle]];
     }
 
+    const EP = EPAULE + tasse, HA = HANCHE + tasse, TE = TETE + tasse;
+    const my = i => mains[i][1] + tasse;
+
     if (auSol){ g.fillStyle(0x000000, 0.28); g.fillEllipse(0, 1, 28, 7); }
 
-    this.membre(g, -1, EPAULE, mains[0][0], mains[0][1], 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
-    this.membre(g, -1, HANCHE, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
+    this.membre(g, -1, EP, mains[0][0], my(0), 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
+    this.membre(g, -1, HA, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
     g.fillStyle(0x171d33, 1); g.fillEllipse(pieds[0][0]+1, pieds[0][1]-1.5, 10, 6);
 
     g.fillStyle(COUL.gi, 1);
-    g.fillPoints([{x:-7,y:EPAULE},{x:7,y:EPAULE},{x:6,y:HANCHE+1},{x:-6,y:HANCHE+1}], true);
+    g.fillPoints([{x:-7,y:EP},{x:7,y:EP},{x:6,y:HA+1},{x:-6,y:HA+1}], true);
     g.lineStyle(2.4, COUL.col, 1);
-    g.beginPath(); g.moveTo(-3, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
-    g.beginPath(); g.moveTo(5, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
+    g.beginPath(); g.moveTo(-3, EP-1); g.lineTo(2, EP+8); g.strokePath();
+    g.beginPath(); g.moveTo(5, EP-1); g.lineTo(2, EP+8); g.strokePath();
     g.fillStyle(COUL.ceinture, 1);
-    g.fillRect(-7, HANCHE-3, 14, 4);
-    g.fillRect(-7.5, HANCHE-3, 3, 8);
+    g.fillRect(-7, HA-3, 14, 4);
+    g.fillRect(-7.5, HA-3, 3, 8);
 
-    this.membre(g, 1, HANCHE, pieds[1][0], pieds[1][1], 9.5, 9.5, -1, COUL.gi, COUL.gi, 9, 7.5);
+    this.membre(g, 1, HA, pieds[1][0], pieds[1][1], 9.5, 9.5, -1, COUL.gi, COUL.gi, 9, 7.5);
     g.fillStyle(COUL.botte, 1); g.fillEllipse(pieds[1][0]+1, pieds[1][1]-1.5, 11, 6.4);
-    this.membre(g, 1, EPAULE, mains[1][0], mains[1][1], 8, 8, 1, COUL.gi, COUL.peau, 7.5, 5.5);
-    // le bracelet se voit au poignet dès qu'on l'a ramassé
-    if (this.laser > 0){
-      g.fillStyle(COUL.laser, 1);      g.fillCircle(mains[1][0], mains[1][1], 4.2);
-      g.fillStyle(COUL.laserClair, 1); g.fillCircle(mains[1][0], mains[1][1], 2.2);
+    this.membre(g, 1, EP, mains[1][0], my(1), 8, 8, 1, COUL.gi, COUL.peau, 7.5, 5.5);
+    // l'arme se voit dans la main dès qu'on en a une
+    if (this.arme){
+      const a = ARMES[this.arme];
+      g.fillStyle(a.couleur, 1); g.fillCircle(mains[1][0], my(1), 4.4);
+      g.fillStyle(a.clair, 1);   g.fillCircle(mains[1][0], my(1), 2.2);
     } else {
-      g.fillStyle(COUL.ceinture, 1);   g.fillCircle(mains[1][0], mains[1][1], 2.6);
+      g.fillStyle(COUL.ceinture, 1); g.fillCircle(mains[1][0], my(1), 2.6);
     }
 
-    const hx = 1, hy = TETE;
+    const hx = 1, hy = TE;
     g.fillStyle(COUL.cheveux, 1);
     const pointes = [[-7,3],[-9,-3],[-13,-7],[-7,-6],[-10,-13],[-3,-8],[0,-15],[3,-7],[9,-11],[6,-3],[10,-4],[7,1]];
     g.fillPoints(pointes.map(p => ({ x: hx + p[0], y: hy + p[1] })), true);
@@ -960,7 +1325,7 @@ class Combat extends Phaser.Scene {
     g.fillEllipse(hx+0.5, hy-4.6, 11.6, 5);
     g.fillRect(hx+2.5, hy-1.6, 2, 2.6);
 
-    g.setPosition(this.joueur.x, this.joueur.y + 20);
+    g.setPosition(this.joueur.x, this.joueur.y + PIEDS);
     g.setRotation(this.sens * inclinaison);
     g.setScale(this.sens * (1 + this.squash*0.22), 1 - this.squash*0.22);
     g.setAlpha(this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
@@ -991,8 +1356,10 @@ let partie = null;
 function demarrer(){
   if (partie || typeof Phaser === 'undefined') return;
   document.body.classList.add('enjeu');
-  // l'appui qui lance la partie ne doit pas être lu comme un saut
-  ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
+  SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
+  ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false;
+  ENTREE.accroupi = false; ENTREE.coupPresse = null;
+  ENTREE.armePresse = false; ENTREE.validePresse = false;
 
   partie = new Phaser.Game({
     type: Phaser.AUTO,
@@ -1004,7 +1371,7 @@ function demarrer(){
     scene: Combat,
   });
   // accessible depuis la console du navigateur pour régler le jeu à chaud :
-  // jeu.scene.getScene('combat').laser = 40
+  // jeu.scene.getScene('combat').munitions = 99
   window.jeu = partie;
 
   // iOS ne recalcule pas toujours la taille du parent tout de suite après
@@ -1015,12 +1382,13 @@ function demarrer(){
 }
 
 if (typeof Phaser !== 'undefined'){
-  // n'importe où sur l'écran-titre, pas seulement sur le bouton
   document.getElementById('titre').addEventListener('pointerdown', e => {
     e.preventDefault(); demarrer();
   });
   addEventListener('keydown', e => {
-    if (!partie && (e.code === 'Space' || e.code === 'Enter')){ e.preventDefault(); demarrer(); }
+    if (!partie && (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp')){
+      e.preventDefault(); demarrer();
+    }
   });
 }
 </script>
