@@ -17,13 +17,14 @@ class Combat extends Phaser.Scene {
     this.pv = PARTIE.pv; this.invuln = CFG.invulnRenais;
     this.vaincus = PARTIE.vaincus; this.morts = PARTIE.morts;
     this.arme = PARTIE.arme; this.munitions = PARTIE.munitions;
+    this.segments = PARTIE.segments | 0;
     this.etat = 'jeu'; this.accroupi = false;
     this.astuceBas = false; this.astuceHaut = false;
     this.eclats = []; this.objets = []; this.caisses = [];
     this.tirs = []; this.tirsEnnemis = [];
     this.msg = null; this.transition = 0;
     this.sAvant = 0;
-    majBoutonArme(this.arme, this.munitions);
+    majBoutonArme(this.arme, this.munitions, this.segments);
 
     this.fond = this.add.graphics().setScrollFactor(0).setDepth(-10);
     this.gSortie = this.add.graphics().setDepth(-2);
@@ -202,19 +203,43 @@ class Combat extends Phaser.Scene {
     SON.jouer(c.son);
     if (c.secousse) this.cameras.main.shake(90, c.secousse);
     if (c.tir) this.tirer(c);
+    if (c.jet) this.ejecterSegment(c);
     if (c.elan && this.joueur.body.blocked.down && !this.accroupi)
       this.joueur.body.setVelocityX(this.sens * c.elan);
   }
   utiliserArme(){
     if (!this.arme){ SON.jouer('vide'); return; }
     if (this.attaque) return;
+    if (this.munitions <= 0){
+      // bracelet vide : l'appui éjecte le segment usé — le jet est une
+      // arme — et un segment neuf s'enclenche s'il en reste
+      this.lancerAttaque('jet');
+      return;
+    }
     this.munitions--;
     this.lancerAttaque(this.arme);
-    if (this.munitions <= 0){
+    majBoutonArme(this.arme, this.munitions, this.segments);
+  }
+  ejecterSegment(c){
+    const a = ARMES[this.arme];
+    const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
+    // le segment usé part en cloche et tournoie : gravité propre, il se
+    // brise au sol
+    this.tirs.push({ x:this.joueur.x + this.sens*14, y,
+      vx:this.sens*430, vy:-190, g:1400,
+      degats:c.degats, recul:c.recul, bas:this.attaque.bas,
+      couleur:a.couleur, clair:a.clair, jet:true, vie:1.6 });
+    if (this.segments > 0){
+      this.segments--;
+      this.munitions = a.munitions;
+      SON.jouer('recharge');
+      this.message('SEGMENT NEUF  —  ' + a.nom + ' ×' + this.munitions);
+    } else {
+      // c'était la dernière pièce du bracelet, elle vient d'être jetée
       this.arme = null; this.munitions = 0;
-      this.message('ARME VIDE');
+      this.message('BRACELET ÉPUISÉ');
     }
-    majBoutonArme(this.arme, this.munitions);
+    majBoutonArme(this.arme, this.munitions, this.segments);
   }
   tirer(c){
     const y = this.joueur.y + PIEDS + c.dy + (this.accroupi ? DECALAGE_ACCROUPI : 0);
@@ -349,11 +374,17 @@ class Combat extends Phaser.Scene {
       this.message('+1 ♥');
     } else {
       const a = ARMES[o.type];
-      this.munitions = (this.arme === o.type ? this.munitions : 0) + a.munitions;
-      this.arme = o.type;
-      majBoutonArme(this.arme, this.munitions);
+      if (this.arme === o.type){
+        this.segments = Math.min(CFG.segmentsMax, this.segments + CFG.segmentsParBracelet);
+        this.message(a.nom + '  —  +' + CFG.segmentsParBracelet + ' SEGMENTS');
+      } else {
+        this.arme = o.type;
+        this.munitions = a.munitions;
+        this.segments = CFG.segmentsParBracelet - 1;
+        this.message(a.nom + '  —  □ POUR TIRER  ×' + this.munitions);
+      }
+      majBoutonArme(this.arme, this.munitions, this.segments);
       SON.jouer('arme');
-      this.message(a.nom + '  —  □ POUR TIRER  ×' + this.munitions);
     }
     o.pris = true;
     o.go.destroy();
@@ -363,6 +394,7 @@ class Combat extends Phaser.Scene {
   // ── étages, mort, victoire ──────────────────────────────────
   sauvegarder(){
     PARTIE.pv = this.pv; PARTIE.arme = this.arme; PARTIE.munitions = this.munitions;
+    PARTIE.segments = this.segments;
     PARTIE.vaincus = this.vaincus; PARTIE.morts = this.morts;
   }
   majRecord(){
@@ -701,6 +733,11 @@ class Combat extends Phaser.Scene {
   majTirs(dt){
     for (const t of this.tirs){
       t.vie -= dt;
+      if (t.g){
+        t.vy += t.g * dt;
+        // le segment jeté se brise en touchant le sol
+        if (t.y > SOL_Y - 3){ this.eclat(t.x, SOL_Y - 4, Math.sign(t.vx), 6, t.couleur); t.fini = true; continue; }
+      }
       t.x += t.vx * dt;
       t.y += t.vy * dt;
       if (t.vie <= 0){ t.fini = true; continue; }

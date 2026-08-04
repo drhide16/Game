@@ -21,7 +21,9 @@ const CFG = {
   seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
   chanceCoeur:   0.35,
   viesDepart:    3,     // au-delà, game over et retour à l'écran d'accueil
-  rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant  // proportion de monstres vaincus qui lâchent un cœur
+  rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
+  segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
+  segmentsMax:   5,     // réserve maximale de segments de rechange  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
@@ -37,12 +39,14 @@ const COUPS = {
   laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, hauteur:20, dy:-40, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
   pistolet: { duree:0.20, debut:0.05, fin:0.06, portee:  0, hauteur: 0, dy:-40, degats:2, recul:180, elan:0, secousse:0.005, son:'pistolet', tir:{ nb:1, vitesse:820, dispersion:0 } },
   fusil:    { duree:0.52, debut:0.07, fin:0.08, portee:  0, hauteur: 0, dy:-38, degats:2, recul:320, elan:0, secousse:0.014, son:'fusil',    tir:{ nb:3, vitesse:700, dispersion:0.13 } },
+  // l'éjection du segment usé : le rechargement est lui-même une attaque
+  jet:      { duree:0.30, debut:0, fin:0, portee:  0, hauteur: 0, dy:-40, degats:2, recul:260, elan:0, secousse:0.004, son:'ejecte', jet:true },
 };
 
 const ARMES = {
-  laser:    { nom:'LASER',    munitions:14, couleur:0xc46bff, clair:0xe9b6ff },
-  pistolet: { nom:'PISTOLET', munitions:24, couleur:0xffd166, clair:0xfff0c2 },
-  fusil:    { nom:'FUSIL',    munitions:10, couleur:0xff7b54, clair:0xffc2ac },
+  laser:    { nom:'LASER',    munitions:8,  couleur:0xc46bff, clair:0xe9b6ff },
+  pistolet: { nom:'PISTOLET', munitions:14, couleur:0xffd166, clair:0xfff0c2 },
+  fusil:    { nom:'FUSIL',    munitions:6,  couleur:0xff7b54, clair:0xffc2ac },
 };
 
 // Chaque bestiole n'est vulnérable qu'à une hauteur : c'est ce qui donne

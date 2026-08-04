@@ -31,7 +31,8 @@ Object.assign(Combat.prototype, {
     }
     let t = this.def.nom + '   VIES ' + Math.max(0, PARTIE.vies)
           + '   MONSTRES ' + this.vaincus;
-    if (this.arme) t += '   ' + ARMES[this.arme].nom + ' ' + this.munitions;
+    if (this.arme) t += '   ' + ARMES[this.arme].nom + ' '
+      + (this.munitions > 0 ? this.munitions + (this.segments > 0 ? '·' + this.segments : '') : 'RECHARGE');
     this.hudTexte.setText(t);
 
     // barre du boss, seulement quand il est à portée de vue
@@ -68,6 +69,17 @@ Object.assign(Combat.prototype, {
       g.fillStyle(0xffffff, k); g.fillCircle(x0, y, 7*k);
     }
     for (const t of this.tirs){
+      if (t.jet){
+        // le segment usé tournoie : un trait épais qui tourne suffit à
+        // donner la rotation à cette taille
+        const a = (1.6 - t.vie) * 14 * Math.sign(t.vx);
+        const cx = Math.cos(a)*6, cy = Math.sin(a)*6;
+        g.fillStyle(t.couleur, 0.22); g.fillCircle(t.x, t.y, 9);
+        g.lineStyle(5, t.couleur, 1);
+        g.beginPath(); g.moveTo(t.x - cx, t.y - cy); g.lineTo(t.x + cx, t.y + cy); g.strokePath();
+        g.fillStyle(t.clair || 0xffffff, 0.95); g.fillCircle(t.x, t.y, 2.2);
+        continue;
+      }
       g.fillStyle(t.couleur, 0.25); g.fillCircle(t.x, t.y, 7);
       g.fillStyle(t.couleur, 1);    g.fillRect(t.x - 5, t.y - 2, 10, 4);
       g.fillStyle(0xffffff, 0.9);   g.fillRect(t.x - 2, t.y - 1, 4, 2);
@@ -420,7 +432,7 @@ Object.assign(Combat.prototype, {
         pieds = [[-8, 0], [7, -ext*3]];
         inclinaison = 0.02 - ext*0.10;
         tasse -= ext * 4;
-      } else if (c.faisceau || c.tir){
+      } else if (c.faisceau || c.tir || c.jet){
         mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
         pieds = [[-9, 0], [8, 0]];
         inclinaison = -0.04 - ext*0.03;
