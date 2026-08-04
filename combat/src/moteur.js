@@ -298,7 +298,10 @@ class Combat extends Phaser.Scene {
       m.mort = true; this.vaincus++;
       SON.jouer('vaincu');
       this.eclat(m.go.x, m.go.y, dir, m.def.boss ? 34 : 14);
-      if (this.alea() < CFG.chanceCoeur || m.def.boss) this.creerObjet(m.go.x, m.go.y - 8, 'coeur');
+      if (this.alea() < CFG.chanceCoeur || m.def.boss) this.creerObjet(m.go.x - 12, m.go.y - 8, 'coeur');
+      // le boss offre aussi une vie : elle part de l'autre côté pour que
+      // les deux cadeaux ne se confondent pas
+      if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
       m.go.destroy();
       if (m.def.boss){
         this.bossVivant = false;
@@ -367,7 +370,12 @@ class Combat extends Phaser.Scene {
     this.objets.push({ go:o, type, phase:this.alea()*6 });
   }
   ramasser(o){
-    if (o.type === 'coeur'){
+    if (o.type === 'vie'){
+      if (PARTIE.vies >= CFG.viesMax) return;   // au plafond, elle reste au sol
+      PARTIE.vies++;
+      SON.jouer('unevie');
+      this.message('+1 VIE');
+    } else if (o.type === 'coeur'){
       if (this.pv >= CFG.pvJoueur) return;   // on laisse le cœur au sol pour plus tard
       this.pv++;
       SON.jouer('coeur');

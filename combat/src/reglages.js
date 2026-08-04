@@ -21,6 +21,7 @@ const CFG = {
   seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
   chanceCoeur:   0.35,
   viesDepart:    3,     // au-delà, game over et retour à l'écran d'accueil
+  viesMax:       5,     // les vies en cadeau des boss ne s'empilent pas au-delà
   rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
   segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
   segmentsMax:   5,     // réserve maximale de segments de rechange  // proportion de monstres vaincus qui lâchent un cœur

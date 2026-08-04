@@ -246,7 +246,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '11';
+const VERSION = '12';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -298,6 +298,7 @@ const CFG = {
   seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
   chanceCoeur:   0.35,
   viesDepart:    3,     // au-delà, game over et retour à l'écran d'accueil
+  viesMax:       5,     // les vies en cadeau des boss ne s'empilent pas au-delà
   rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
   segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
   segmentsMax:   5,     // réserve maximale de segments de rechange  // proportion de monstres vaincus qui lâchent un cœur
@@ -513,6 +514,7 @@ const SON = {
       case 'gagne':    [523,659,784,1047].forEach((f,i) => this.note('square', f, f, 0.2, 0.2, i*0.11)); break;
       case 'vide':     this.note('square', 160, 120, 0.06, 0.12); break;
       case 'ejecte':   this.note('square', 1100, 700, 0.07, 0.18); this.souffle(0.14, 0.32, 900, 1.2); break;
+      case 'unevie':   [392,523,659,784,1047].forEach((f,i) => this.note('triangle', f, f, 0.16, 0.22, i*0.07)); break;
       case 'recharge': this.note('square', 500, 500, 0.05, 0.16); this.note('square', 950, 950, 0.06, 0.2, 0.08); break;
       case 'visee':    this.note('square', 900, 1500, 0.5, 0.09); break;
       case 'tirEnnemi':this.note('sawtooth', 500, 200, 0.14, 0.18); break;
@@ -971,7 +973,10 @@ class Combat extends Phaser.Scene {
       m.mort = true; this.vaincus++;
       SON.jouer('vaincu');
       this.eclat(m.go.x, m.go.y, dir, m.def.boss ? 34 : 14);
-      if (this.alea() < CFG.chanceCoeur || m.def.boss) this.creerObjet(m.go.x, m.go.y - 8, 'coeur');
+      if (this.alea() < CFG.chanceCoeur || m.def.boss) this.creerObjet(m.go.x - 12, m.go.y - 8, 'coeur');
+      // le boss offre aussi une vie : elle part de l'autre côté pour que
+      // les deux cadeaux ne se confondent pas
+      if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
       m.go.destroy();
       if (m.def.boss){
         this.bossVivant = false;
@@ -1040,7 +1045,12 @@ class Combat extends Phaser.Scene {
     this.objets.push({ go:o, type, phase:this.alea()*6 });
   }
   ramasser(o){
-    if (o.type === 'coeur'){
+    if (o.type === 'vie'){
+      if (PARTIE.vies >= CFG.viesMax) return;   // au plafond, elle reste au sol
+      PARTIE.vies++;
+      SON.jouer('unevie');
+      this.message('+1 VIE');
+    } else if (o.type === 'coeur'){
       if (this.pv >= CFG.pvJoueur) return;   // on laisse le cœur au sol pour plus tard
       this.pv++;
       SON.jouer('coeur');
@@ -1732,6 +1742,20 @@ Object.assign(Combat.prototype, {
     const g = this.gObjets; g.clear();
     for (const o of this.objets){
       const x = o.go.x, y = o.go.y + Math.sin(o.phase)*2.5;
+      if (o.type === 'vie'){
+        // une VIE : cœur doré à petites ailes, halo appuyé — il ne doit
+        // pas se confondre avec le cœur de soin rouge
+        const bat = Math.sin(o.phase * 2) * 2;
+        g.fillStyle(0xffd166, 0.22); g.fillCircle(x, y, 17);
+        g.fillStyle(0xfff0c2, 0.9);
+        g.fillTriangle(x-8, y-4, x-16, y-9+bat, x-8, y+2);
+        g.fillTriangle(x+8, y-4, x+16, y-9+bat, x+8, y+2);
+        g.fillStyle(0xffd166, 1);
+        g.fillCircle(x-4, y-3, 5); g.fillCircle(x+4, y-3, 5);
+        g.fillTriangle(x-9, y, x+9, y, x, y+10);
+        g.fillStyle(0xffffff, 0.9); g.fillCircle(x-4, y-5, 1.8);
+        continue;
+      }
       if (o.type === 'coeur'){
         g.fillStyle(0xe2584d, 0.18); g.fillCircle(x, y, 15);
         g.fillStyle(0xe2584d, 1);

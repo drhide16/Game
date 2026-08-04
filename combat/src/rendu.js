@@ -276,6 +276,20 @@ Object.assign(Combat.prototype, {
     const g = this.gObjets; g.clear();
     for (const o of this.objets){
       const x = o.go.x, y = o.go.y + Math.sin(o.phase)*2.5;
+      if (o.type === 'vie'){
+        // une VIE : cœur doré à petites ailes, halo appuyé — il ne doit
+        // pas se confondre avec le cœur de soin rouge
+        const bat = Math.sin(o.phase * 2) * 2;
+        g.fillStyle(0xffd166, 0.22); g.fillCircle(x, y, 17);
+        g.fillStyle(0xfff0c2, 0.9);
+        g.fillTriangle(x-8, y-4, x-16, y-9+bat, x-8, y+2);
+        g.fillTriangle(x+8, y-4, x+16, y-9+bat, x+8, y+2);
+        g.fillStyle(0xffd166, 1);
+        g.fillCircle(x-4, y-3, 5); g.fillCircle(x+4, y-3, 5);
+        g.fillTriangle(x-9, y, x+9, y, x, y+10);
+        g.fillStyle(0xffffff, 0.9); g.fillCircle(x-4, y-5, 1.8);
+        continue;
+      }
       if (o.type === 'coeur'){
         g.fillStyle(0xe2584d, 0.18); g.fillCircle(x, y, 15);
         g.fillStyle(0xe2584d, 1);
