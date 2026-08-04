@@ -240,7 +240,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '7';
+const VERSION = '8';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -274,6 +274,7 @@ const VERSION = '7';
 const CFG = {
   gravite:       2200,
   vitesseSaut:   700,
+  sautAerien:    620,   // le second saut, un peu plus court que le premier
   coupureSaut:   220,
   coyote:        0.10,
   bufferSaut:    0.12,
@@ -286,58 +287,105 @@ const CFG = {
   invincibilite: 0.9,
   invulnRenais:  1.8,   // le temps de souffler quand on réapparaît
   zoneMorte:     0.24,  // part du rayon du joystick ignorée au centre
-  seuilHaut:     0.45,  // au-delà, le joystick vers le haut = saut
+  seuilHaut:     0.45,  // au-delà, le joystick vers le haut = uppercut
   seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
   chanceCoeur:   0.35,  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
 // son dessin : c'est le seul repère qui reste juste quand il s'accroupit.
-const PIEDS = 20;          // décalage du bas de la boîte par rapport à son centre
-const DECALAGE_ACCROUPI = 16;  // accroupi, tous les coups descendent d'autant
+const PIEDS = 20;
+const DECALAGE_ACCROUPI = 16;
 
 const COUPS = {
   poing:    { duree:0.26, debut:0.05, fin:0.14, portee: 26, hauteur:32, dy:-40, degats:1, recul:210, elan: 40, secousse:0.004, son:'poing' },
-  // dy remonté à -34 : à -26 le pied passait sous le drone et ne pouvait
-  // jamais l'atteindre, alors que debout il est censé être vulnérable
   pied:     { duree:0.44, debut:0.13, fin:0.27, portee: 36, hauteur:34, dy:-34, degats:2, recul:360, elan:120, secousse:0.009, son:'pied' },
-  // uppercut, sur la flèche du haut : il frappe au-dessus de la tête, donc
-  // il atteint les drones et passe très au-dessus des baveux
   crochet:  { duree:0.30, debut:0.07, fin:0.17, portee: 26, hauteur:38, dy:-54, degats:2, recul:260, elan:  0, secousse:0.007, son:'poing' },
   retourne: { duree:0.62, debut:0.20, fin:0.40, portee: 34, hauteur:40, dy:-34, degats:3, recul:430, elan:  0, secousse:0.013, son:'retourne', bilateral:true },
-  // armes
   laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, hauteur:20, dy:-40, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
   pistolet: { duree:0.20, debut:0.05, fin:0.06, portee:  0, hauteur: 0, dy:-40, degats:2, recul:180, elan:0, secousse:0.005, son:'pistolet', tir:{ nb:1, vitesse:820, dispersion:0 } },
   fusil:    { duree:0.52, debut:0.07, fin:0.08, portee:  0, hauteur: 0, dy:-38, degats:2, recul:320, elan:0, secousse:0.014, son:'fusil',    tir:{ nb:3, vitesse:700, dispersion:0.13 } },
 };
 
-// Ce qu'on trouve dans les caisses. Toutes se branchent sur le bouton ✕.
 const ARMES = {
   laser:    { nom:'LASER',    munitions:14, couleur:0xc46bff, clair:0xe9b6ff },
   pistolet: { nom:'PISTOLET', munitions:24, couleur:0xffd166, clair:0xfff0c2 },
   fusil:    { nom:'FUSIL',    munitions:10, couleur:0xff7b54, clair:0xffc2ac },
 };
 
-// Trois bestioles, trois façons de les atteindre. C'est ce qui donne
-// son intérêt à l'accroupissement : chacune n'est vulnérable qu'à une hauteur.
+// Chaque bestiole n'est vulnérable qu'à une hauteur : c'est ce qui donne
+// son intérêt à l'accroupissement et à l'uppercut.
 const MONSTRES = {
-  baveux:  { pv:3, taille:[26,30], vitesse:85, patrouille:45, degats:1, hauteurVol:0,  faible:'bas',  vole:false },
-  drone:   { pv:2, taille:[26,24], vitesse:110, patrouille:60, degats:1, hauteurVol:46, faible:'haut', vole:true  },
-  colosse: { pv:6, taille:[38,44], vitesse:52, patrouille:30, degats:2, hauteurVol:0,  faible:null,   vole:false },
+  baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:1, vol:0,  faible:'bas',  silhouette:'brute' },
+  drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:1, vol:46, faible:'haut', silhouette:'drone', vole:true },
+  colosse: { pv:6,  taille:[38,44], vitesse: 52, patrouille:30, degats:2, vol:0,  faible:null,   silhouette:'brute', gros:true },
+  // le gardien annonce son coup : il se ramasse, puis se détend d'un bloc
+  gardien: { pv:4,  taille:[28,40], vitesse:120, patrouille:70, degats:1, vol:0,  faible:null,   silhouette:'gardien',
+             charge:{ portee:210, preparation:0.45, elan:430, repos:1.9 } },
+  // la tourelle ne bouge pas, elle vise et tire — avec un temps de visée
+  tourelle:{ pv:3,  taille:[30,28], vitesse:0,   patrouille:0,  degats:1, vol:0,  faible:null,   silhouette:'tourelle',
+             fixe:true, canon:{ portee:430, visee:0.75, repos:2.1, vitesse:430 } },
+  // Un boss garde la sortie de chaque étage. Ils réutilisent les
+  // silhouettes existantes, en plus gros et avec leur propre couleur.
+  cogneur:  { pv:14, taille:[46,52], vitesse: 74, patrouille:34, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+              nom:'LE COGNEUR',              couleur:0x9b5f2f, ombre:0x6b3d1c },
+  chefSecu: { pv:16, taille:[34,48], vitesse:150, patrouille:80, degats:2, vol:0, faible:null, silhouette:'gardien', boss:true,
+              nom:'LE CHEF DE LA SÉCURITÉ',  couleur:0x2f8f7a, ombre:0x1c5c4d,
+              charge:{ portee:280, preparation:0.36, elan:520, repos:1.4 } },
+  canonnier:{ pv:14, taille:[44,38], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
+              nom:'LA TOURELLE LOURDE',      couleur:0x6b4a7f, ombre:0x412c4f,
+              canon:{ portee:540, visee:0.5, repos:1.1, vitesse:520 } },
+  broyeur:  { pv:18, taille:[50,58], vitesse: 92, patrouille:44, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+              nom:'LE BROYEUR',              couleur:0xb03a3a, ombre:0x762222 },
+  patron:   { pv:26, taille:[58,66], vitesse: 82, patrouille:40, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true, final:true,
+              nom:'LE PATRON',               couleur:0x9b2f2f, ombre:0x631d1d },
 };
 
-const L = 900, H = 480, SOL_Y = 380, LARGEUR_MONDE = 7600;
+// ─────────────────────────────────────────────────────────────
+// LES ÉTAGES
+// On part de la rue, on entre dans l'immeuble, et on monte jusqu'au toit.
+// ─────────────────────────────────────────────────────────────
+// Chaque étage a sa propre teinte : on doit reconnaître où on est d'un
+// coup d'œil, sans lire le bandeau. Le hall est un marbre bleu et froid,
+// les bureaux sont ambrés, la machinerie rouille, le toit vire au violet.
+const NIVEAUX = [
+  { nom:'LA RUE',        sous:'rejoins la tour',        decor:'exterieur', largeur:7000, sortie:'porte',
+    peuple:['baveux','baveux','drone','colosse'], boss:'cogneur' },
+  { nom:'LE HALL',       sous:'1ᵉʳ étage',              decor:'interieur', largeur:3400, sortie:'ascenseur',
+    peuple:['gardien','gardien','colosse','baveux'], boss:'chefSecu',
+    teinte:{ fondHaut:0x14202e, fondBas:0x081019, mur:0x1b2f42, murHaut:0x27455f, plafond:0x081119,
+             neon:0xcdeeff, sol:0x142230, solBord:0x6fb3d6, plat:0x1d3b4e, platBord:0x8fd8f2 } },
+  { nom:'LES BUREAUX',   sous:'14ᵉ étage',              decor:'interieur', largeur:3800, sortie:'ascenseur',
+    peuple:['gardien','tourelle','drone','gardien'], boss:'canonnier',
+    teinte:{ fondHaut:0x241d14, fondBas:0x120d08, mur:0x35281a, murHaut:0x4a3823, plafond:0x140f09,
+             neon:0xffe0a8, sol:0x261d12, solBord:0xd8a45c, plat:0x3c2d1c, platBord:0xf0c780 } },
+  { nom:'LA MACHINERIE', sous:'37ᵉ étage',              decor:'interieur', largeur:4000, sortie:'echelle',
+    peuple:['tourelle','tourelle','colosse','drone','gardien'], boss:'broyeur',
+    teinte:{ fondHaut:0x2a1618, fondBas:0x130a0b, mur:0x3a1e1f, murHaut:0x542b2b, plafond:0x150b0c,
+             neon:0xff9d8a, sol:0x2b1718, solBord:0xd4736a, plat:0x402323, platBord:0xf09a8c } },
+  { nom:'LE TOIT',       sous:'tout en haut',           decor:'toit',      largeur:3000, sortie:'patron',
+    peuple:['drone','drone','gardien'], boss:'patron' },
+];
+
+const L = 900, H = 480, SOL_Y = 380;
 
 const COUL = {
   sol:0x0a0d1a, solBord:0x39457a, plat:0x16463f, platBord:0x4dd6c1,
   solVille:0x121018, solBordVille:0xe0a44c,
+  solDedans:0x1a1f38, solBordDedans:0x5a6ea8,
+  solToit:0x23283f,   solBordToit:0x8f9ad0,
   gi:0xf2e6cf, giOmbre:0xd3c0a0, ceinture:0xff9d2e,
   peau:0xf0c090, peauOmbre:0xc9a377, cheveux:0x181d30, col:0x2b7d72, botte:0x232a45,
   baveux:0x7b3f8f, baveuxOmbre:0x552a63, baveuxOeil:0xffe08a,
   drone:0x39406b, droneOmbre:0x252a4a, droneOeil:0xff5e5e,
   colosse:0x8f4a3f, colosseOmbre:0x612f28, colosseOeil:0xffe08a,
+  gardien:0x2f6d8f, gardienOmbre:0x1d4560, gardienVisiere:0x8fe6ff,
+  tourelle:0x4a4f6b, tourelleOmbre:0x2e3248, tourelleOeil:0xff5e5e,
+  patron:0x9b2f2f, patronOmbre:0x631d1d,
   bois:0x8a5a2b, boisClair:0xb07a3e, boisOmbre:0x6d4420,
-  blinde:0x6f9bff,   // éclat bleu quand on frappe à la mauvaise hauteur
+  blinde:0x6f9bff,
+  poussiere:0x6b7399,
+  tirEnnemi:0xff6b5e,
 };
 const HANCHE = -19, EPAULE = -30, TETE = -35;
 
@@ -353,6 +401,14 @@ function generateur(s){
   };
 }
 
+// Ce qu'on emporte d'un étage à l'autre. Vit en dehors de la scène,
+// puisque changer d'étage relance la scène.
+let PARTIE = null;
+function nouvellePartieEtat(){
+  return { niveau:0, pv:CFG.pvJoueur, arme:null, munitions:0, vaincus:0, morts:0 };
+}
+PARTIE = nouvellePartieEtat();
+
 // ─────────────────────────────────────────────────────────────
 // RECORD
 // ─────────────────────────────────────────────────────────────
@@ -360,17 +416,17 @@ const CLE_RECORD = 'martin-games-combat';
 function lireRecord(){
   try {
     const r = JSON.parse(localStorage.getItem(CLE_RECORD));
-    if (r && typeof r.monstres === 'number') return r;
+    if (r && typeof r.monstres === 'number') return { monstres:r.monstres|0, etage:r.etage|0 };
   } catch (e) { /* navigation privée : on joue sans record */ }
-  return { monstres:0, metres:0 };
+  return { monstres:0, etage:0 };
 }
 function ecrireRecord(r){
   try { localStorage.setItem(CLE_RECORD, JSON.stringify(r)); } catch (e) {}
 }
 function afficherRecord(){
   const r = lireRecord(), el = document.getElementById('record');
-  if (el) el.textContent = (r.monstres || r.metres)
-    ? 'RECORD  ' + r.monstres + ' MONSTRES  ·  ' + r.metres + ' M' : '';
+  if (el) el.textContent = (r.monstres || r.etage)
+    ? 'RECORD  ' + r.monstres + ' MONSTRES  ·  ' + NIVEAUX[Math.min(r.etage, NIVEAUX.length-1)].nom : '';
 }
 afficherRecord();
 
@@ -432,6 +488,7 @@ const SON = {
       case 'blinde':   this.note('square', 1200, 900, 0.11, 0.22); this.souffle(0.09, 0.3, 2600, 2); break;
       case 'vaincu':   this.note('square', 420, 80, 0.34, 0.24); this.souffle(0.3, 0.32, 700, 0.6); break;
       case 'saut':     this.note('sine', 320, 640, 0.12, 0.2); break;
+      case 'saut2':    this.note('triangle', 520, 880, 0.14, 0.2); this.souffle(0.1, 0.2, 1400, 1); break;
       case 'caisse':   this.souffle(0.2, 0.55, 300, 0.5); this.note('triangle', 150, 60, 0.18, 0.2); break;
       case 'coeur':    this.note('sine', 660, 660, 0.1, 0.24); this.note('sine', 990, 990, 0.14, 0.24, 0.09); break;
       case 'arme':     [440,660,880,1320].forEach((f,i) => this.note('square', f, f, 0.1, 0.16, i*0.06)); break;
@@ -439,6 +496,12 @@ const SON = {
       case 'mort':     [440,330,262,196].forEach((f,i) => this.note('triangle', f, f, 0.26, 0.22, i*0.16)); break;
       case 'gagne':    [523,659,784,1047].forEach((f,i) => this.note('square', f, f, 0.2, 0.2, i*0.11)); break;
       case 'vide':     this.note('square', 160, 120, 0.06, 0.12); break;
+      case 'visee':    this.note('square', 900, 1500, 0.5, 0.09); break;
+      case 'tirEnnemi':this.note('sawtooth', 500, 200, 0.14, 0.18); break;
+      case 'charge':   this.note('sawtooth', 120, 300, 0.4, 0.14); break;
+      case 'ascenseur':[392,523,659].forEach((f,i) => this.note('sine', f, f, 0.5, 0.22, i*0.13));
+                       this.souffle(0.6, 0.12, 200, 0.5); break;
+      case 'final':    [523,659,784,1047,1319].forEach((f,i) => this.note('square', f, f, 0.28, 0.22, i*0.16)); break;
     }
   },
 };
@@ -463,9 +526,8 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 // ─────────────────────────────────────────────────────────────
 // MANETTE TACTILE
 // Joystick : gauche/droite pour avancer, bas pour s'accroupir et ramper,
-// haut pour l'uppercut. Le saut revient sur ✕, et le bouton poing cède
-// sa place à l'arme dès qu'on en ramasse une. Chaque bouton capte son
-// propre pointeur, le multi-touch marche sans code supplémentaire.
+// haut pour l'uppercut. Saut sur ✕ (deux fois pour le double saut), et
+// le bouton poing cède sa place à l'arme dès qu'on en ramasse une.
 // ─────────────────────────────────────────────────────────────
 const ENTREE = {
   axeX:0, saut:false, sautPresse:false, accroupi:false,
@@ -508,6 +570,7 @@ function relacherJoystick(){
   pouce.style.transform = 'translate(0,0)';
   socle.classList.remove('actif');
 }
+
 // la capture de pointeur est un confort, pas une condition : si elle
 // échoue, il ne faut surtout pas que l'appui soit perdu avec elle
 function capturer(el, id){ try { el.setPointerCapture(id); } catch (e) {} }
@@ -591,27 +654,28 @@ class Combat extends Phaser.Scene {
   constructor(){ super('combat'); }
 
   create(){
-    this.alea = generateur(GRAINE);
-    this.phase = 0; this.squash = 0; this.sens = 1;
-    this.coyote = 0; this.buffer = 0;
-    this.attaque = null;
-    this.pv = CFG.pvJoueur; this.invuln = 0;
-    this.vaincus = 0; this.morts = 0; this.etat = 'jeu';
-    this.accroupi = false;
-    this.arme = null; this.munitions = 0;
-    this.astuceBas = false; this.astuceHaut = false;
-    this.eclats = []; this.objets = []; this.caisses = []; this.tirs = [];
-    this.msg = null;
-    majBoutonArme(null, 0);
+    this.def = NIVEAUX[Math.min(PARTIE.niveau, NIVEAUX.length - 1)];
+    this.largeur = this.def.largeur;
+    // graine dérivée de l'étage : chaque étage a sa propre disposition,
+    // et mourir ne la redessine pas
+    this.alea = generateur(GRAINE + PARTIE.niveau * 7919);
 
-    this.physics.world.setBounds(0, -400, LARGEUR_MONDE, H + 900);
-    // Pas de mur en bas : setCollideWorldBounds sert à empêcher de sortir
-    // par les côtés, mais s'il bloque aussi le bas, on ne tombe jamais
-    // vraiment et le test de chute ne se déclenche pas.
-    this.physics.world.setBoundsCollision(true, true, false, false);
-    this.cameras.main.setBounds(0, 0, LARGEUR_MONDE, H);
+    this.phase = 0; this.squash = 0; this.sens = 1;
+    this.coyote = 0; this.buffer = 0; this.sautsAir = 0;
+    this.attaque = null;
+    this.pv = PARTIE.pv; this.invuln = CFG.invulnRenais;
+    this.vaincus = PARTIE.vaincus; this.morts = PARTIE.morts;
+    this.arme = PARTIE.arme; this.munitions = PARTIE.munitions;
+    this.etat = 'jeu'; this.accroupi = false;
+    this.astuceBas = false; this.astuceHaut = false;
+    this.eclats = []; this.objets = []; this.caisses = [];
+    this.tirs = []; this.tirsEnnemis = [];
+    this.msg = null; this.transition = 0;
+    this.sAvant = 0;
+    majBoutonArme(this.arme, this.munitions);
 
     this.fond = this.add.graphics().setScrollFactor(0).setDepth(-10);
+    this.gSortie = this.add.graphics().setDepth(-2);
     this.sols = this.add.group();
     this.plateformes = this.add.group();
     this.grCaisses = this.add.group();
@@ -630,6 +694,17 @@ class Combat extends Phaser.Scene {
     this.gTirs     = this.add.graphics().setDepth(7);
 
     this.construireNiveau();
+    // Les limites sont posées APRÈS la construction : la sortie tombe où
+    // le tirage l'a mise, et si le monde s'arrêtait à la largeur nominale
+    // elle pouvait se retrouver derrière le mur invisible, donc
+    // inatteignable, et hors du champ que la caméra sait atteindre.
+    this.physics.world.setBounds(0, -400, this.largeur, H + 900);
+    // Pas de mur en bas : setCollideWorldBounds sert à empêcher de sortir
+    // par les côtés, mais s'il bloque aussi le bas, on ne tombe jamais
+    // vraiment et le test de chute ne se déclenche pas.
+    this.physics.world.setBoundsCollision(true, true, false, false);
+    this.cameras.main.setBounds(0, 0, this.largeur, H);
+
     this.physics.add.collider(this.joueur, this.sols);
     this.physics.add.collider(this.joueur, this.plateformes);
     this.physics.add.collider(this.joueur, this.grCaisses);
@@ -642,22 +717,32 @@ class Combat extends Phaser.Scene {
     this.hudMsg = this.add.text(L/2, 96, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'13px', color:'#ffd98a' })
       .setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
+    this.hudBoss = this.add.text(L/2, H - 48, '',
+      { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'11px', color:'#ffb0a8' })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
     this.hudFin = this.add.text(L/2, H/2 - 30, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'18px', color:'#cbd5f0', align:'center' })
       .setOrigin(0.5).setScrollFactor(0).setDepth(11);
+
+    this.message(this.def.nom + '  —  ' + this.def.sous);
   }
 
-  // ── décor ───────────────────────────────────────────────────
-  // 0 = campagne, 1 = ville. La bascule se fait entre 42 % et 68 %
-  // du niveau : on voit la ville arriver bien avant d'y être.
-  urbain(x){ return Phaser.Math.Clamp((x / LARGEUR_MONDE - 0.42) / 0.26, 0, 1); }
+  // ── couleurs ────────────────────────────────────────────────
+  urbain(x){ return Phaser.Math.Clamp((x / this.largeur - 0.42) / 0.26, 0, 1); }
   melange(a, b, t){
     const ar=(a>>16)&255, ag=(a>>8)&255, ab=a&255;
     const br=(b>>16)&255, bg=(b>>8)&255, bb=b&255;
     return (((ar+(br-ar)*t)|0)<<16) | (((ag+(bg-ag)*t)|0)<<8) | ((ab+(bb-ab)*t)|0);
   }
+  couleurSol(x){
+    const t = this.def.teinte;
+    if (this.def.decor === 'interieur') return t ? [t.sol, t.solBord] : [COUL.solDedans, COUL.solBordDedans];
+    if (this.def.decor === 'toit')      return [COUL.solToit, COUL.solBordToit];
+    const u = this.urbain(x);
+    return [this.melange(COUL.sol, COUL.solVille, u), this.melange(COUL.solBord, COUL.solBordVille, u)];
+  }
 
-  // ── niveau ──────────────────────────────────────────────────
+  // ── construction ────────────────────────────────────────────
   creerSol(x, w){
     // un seul corps physique, mais le visuel est tranché en lamelles dans
     // la zone de transition : sinon la couleur saute d'un bloc à l'autre
@@ -665,19 +750,20 @@ class Combat extends Phaser.Scene {
     this.physics.add.existing(r, true);
     this.sols.add(r);
 
-    const uG = this.urbain(x), uD = this.urbain(x + w);
-    const pas = (uG === uD) ? w : 40;
+    const degrade = this.def.decor === 'exterieur' && this.urbain(x) !== this.urbain(x + w);
+    const pas = degrade ? 40 : w;
     for (let sx = x; sx < x + w; sx += pas){
       const lw = Math.min(pas, x + w - sx);
-      const u = this.urbain(sx + lw/2);
-      this.add.rectangle(sx + lw/2, SOL_Y + (H - SOL_Y)/2, lw + 1, H - SOL_Y,
-        this.melange(COUL.sol, COUL.solVille, u)).setDepth(-5);
-      this.add.rectangle(sx + lw/2, SOL_Y + 2, lw + 1, 4,
-        this.melange(COUL.solBord, COUL.solBordVille, u)).setDepth(-4);
+      const [c, cb] = this.couleurSol(sx + lw/2);
+      this.add.rectangle(sx + lw/2, SOL_Y + (H - SOL_Y)/2, lw + 1, H - SOL_Y, c).setDepth(-5);
+      this.add.rectangle(sx + lw/2, SOL_Y + 2, lw + 1, 4, cb).setDepth(-4);
     }
   }
   creerPlateforme(x, y, w){
-    const p = this.add.rectangle(x + w/2, y + 7, w, 14, COUL.plat).setStrokeStyle(2, COUL.platBord);
+    const t = this.def.teinte;
+    const dedans = this.def.decor !== 'exterieur';
+    const p = this.add.rectangle(x + w/2, y + 7, w, 14, t ? t.plat : dedans ? 0x2a3152 : COUL.plat)
+      .setStrokeStyle(2, t ? t.platBord : dedans ? 0x7f8cc4 : COUL.platBord);
     this.physics.add.existing(p, true);
     p.body.checkCollision.down = false;
     p.body.checkCollision.left = false;
@@ -686,21 +772,25 @@ class Combat extends Phaser.Scene {
   }
   creerMonstre(type, x, minX, maxX){
     const d = MONSTRES[type];
-    const y = SOL_Y - d.taille[1]/2 - d.hauteurVol;
+    const y = SOL_Y - d.taille[1]/2 - d.vol;
     const go = this.add.rectangle(x, y, d.taille[0], d.taille[1], 0xffffff, 0);
     this.physics.add.existing(go);
     go.body.setCollideWorldBounds(true);
-    if (d.vole){
+    if (d.vole || d.fixe){
       go.body.setAllowGravity(false);
+      if (d.fixe) go.body.setImmovable(true);
     } else {
       this.physics.add.collider(go, this.sols);
       this.physics.add.collider(go, this.plateformes);
       this.physics.add.collider(go, this.grCaisses);
     }
-    this.monstres.push({
+    const m = {
       go, type, def:d, pv:d.pv, pvMax:d.pv, assomme:0, flash:0, blinde:0,
       dir:-1, minX, maxX, baseY:y, phase:this.alea()*6,
-    });
+      prepare:0, repos:0, vise:0,
+    };
+    this.monstres.push(m);
+    return m;
   }
   creerCaisse(x){
     const c = this.add.rectangle(x, SOL_Y - 15, 30, 30, 0xffffff, 0);
@@ -708,20 +798,28 @@ class Combat extends Phaser.Scene {
     this.grCaisses.add(c);
     this.caisses.push({ go:c, pv:2, flash:0 });
   }
-  // la campagne est au baveux, la ville au drone, le colosse traîne partout
   tirerType(x){
-    const u = this.urbain(x), r = this.alea();
-    if (r < 0.14) return 'colosse';
-    return r < 0.14 + (1 - u) * 0.86 ? 'baveux' : 'drone';
+    const p = this.def.peuple;
+    if (this.def.decor === 'exterieur'){
+      // dehors, le violet cède la place au drone à mesure qu'on entre en ville
+      const u = this.urbain(x), r = this.alea();
+      if (r < 0.14) return 'colosse';
+      return r < 0.14 + (1 - u) * 0.86 ? 'baveux' : 'drone';
+    }
+    return p[Math.floor(this.alea() * p.length)];
   }
   construireNiveau(){
+    const larg = this.largeur;
     this.creerSol(-200, 900);
     let x = 700;
-    while (x < LARGEUR_MONDE - 700){
-      const long = 380 + this.alea() * 420;
+    // dedans le sol est plus continu que dans la rue : on est dans un
+    // bâtiment, pas sur un terrain vague
+    const dedans = this.def.decor !== 'exterieur';
+    while (x < larg - 700){
+      const long = (dedans ? 480 : 380) + this.alea() * 420;
       this.creerSol(x, long);
-      if (this.alea() < 0.4)
-        this.creerPlateforme(x + long*0.35, SOL_Y - 105 - this.alea()*25, 120 + this.alea()*70);
+      if (this.alea() < (dedans ? 0.6 : 0.4))
+        this.creerPlateforme(x + long*0.35, SOL_Y - 100 - this.alea()*40, 110 + this.alea()*80);
       const nb = 1 + (this.alea() < 0.45 ? 1 : 0);
       for (let i = 0; i < nb; i++){
         const mx = x + 80 + this.alea()*(long - 160);
@@ -729,12 +827,17 @@ class Combat extends Phaser.Scene {
       }
       if (this.alea() < 0.45) this.creerCaisse(x + 60 + this.alea()*(long - 120));
       x += long;
-      if (this.alea() < 0.55) x += 80 + this.alea()*40;
+      // moins de trous à l'intérieur, et jamais sur le toit près du bord
+      if (this.alea() < (dedans ? 0.35 : 0.55)) x += 70 + this.alea()*40;
     }
-    this.creerSol(x, 700);
-    this.finX = x + 560;
-    this.portail = this.add.rectangle(this.finX, SOL_Y - 60, 16, 120, 0xff9d2e, 0.25)
-      .setStrokeStyle(2, COUL.ceinture);
+    this.creerSol(x, 800);
+    this.sortieX = x + 620;
+    // le monde doit englober la sortie, sinon elle est hors d'atteinte
+    this.largeur = Math.max(this.largeur, this.sortieX + 300);
+
+    // le boss garde la sortie : elle reste verrouillée tant qu'il tient
+    this.boss = this.creerMonstre(this.def.boss, this.sortieX - 190, x + 60, this.sortieX - 40);
+    this.bossVivant = true;
   }
 
   // ── combat ──────────────────────────────────────────────────
@@ -760,7 +863,7 @@ class Combat extends Phaser.Scene {
     majBoutonArme(this.arme, this.munitions);
   }
   tirer(c){
-    const y = this.hauteurCoup(c);
+    const y = this.joueur.y + PIEDS + c.dy + (this.accroupi ? DECALAGE_ACCROUPI : 0);
     for (let i = 0; i < c.tir.nb; i++){
       const ec = (c.tir.nb === 1) ? 0 : (i - (c.tir.nb-1)/2) * c.tir.dispersion;
       this.tirs.push({
@@ -773,10 +876,6 @@ class Combat extends Phaser.Scene {
       });
     }
   }
-  // hauteur d'un coup, mesurée depuis les pieds comme le dessin du perso
-  hauteurCoup(c){
-    return this.joueur.y + PIEDS + c.dy + (this.accroupi ? DECALAGE_ACCROUPI : 0);
-  }
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
     if (!c.portee) return [];
@@ -787,7 +886,6 @@ class Combat extends Phaser.Scene {
       return new Phaser.Geom.Rectangle(cx - c.portee/2, y - c.hauteur/2, c.portee, c.hauteur);
     });
   }
-  // le cœur de la mécanique : chaque bestiole n'est vulnérable qu'à une hauteur
   vulnerable(m, bas){
     if (m.def.faible === 'bas')  return bas;
     if (m.def.faible === 'haut') return !bas;
@@ -808,16 +906,24 @@ class Combat extends Phaser.Scene {
       return;
     }
     const dir = Math.sign(m.go.x - sourceX) || this.sens;
-    m.pv -= degats; m.flash = 0.14; m.assomme = 0.22;
-    m.go.body.setVelocity(dir * recul, m.def.vole ? 0 : -160);
+    m.pv -= degats; m.flash = 0.14;
+    if (!m.def.fixe){
+      m.assomme = 0.22; m.prepare = 0;
+      m.go.body.setVelocity(dir * recul * (m.def.boss ? 0.35 : 1), m.def.vole ? 0 : -160);
+    }
     SON.jouer('touche');
     this.eclat(m.go.x, m.go.y, dir);
     if (m.pv <= 0){
       m.mort = true; this.vaincus++;
       SON.jouer('vaincu');
-      this.eclat(m.go.x, m.go.y, dir, 14);
-      if (this.alea() < CFG.chanceCoeur) this.creerObjet(m.go.x, m.go.y - 8, 'coeur');
+      this.eclat(m.go.x, m.go.y, dir, m.def.boss ? 34 : 14);
+      if (this.alea() < CFG.chanceCoeur || m.def.boss) this.creerObjet(m.go.x, m.go.y - 8, 'coeur');
       m.go.destroy();
+      if (m.def.boss){
+        this.bossVivant = false;
+        if (m.def.final) this.gagnerPartie();
+        else this.message(m.def.nom + ' EST À TERRE  —  LA SORTIE S\'OUVRE');
+      }
     }
   }
   casser(k, degats){
@@ -845,6 +951,16 @@ class Combat extends Phaser.Scene {
         vx: sens*(60 + this.alea()*190) + (this.alea()-0.5)*90,
         vy: -110 + (this.alea()-0.5)*220,
         vie: 0.28 + this.alea()*0.22, max: 0.5 });
+  }
+  poussiere(vx){
+    // petits nuages sous les pieds quand on court vite : c'est ce qui
+    // donne le sentiment de vitesse, plus que l'animation elle-même
+    const s = Math.sign(vx) || 1;
+    for (let i = 0; i < 3; i++)
+      this.eclats.push({ x: this.joueur.x - s*8, y: this.joueur.y + PIEDS - 1,
+        couleur: COUL.poussiere,
+        vx: -s*(40 + this.alea()*90), vy: -15 - this.alea()*55,
+        vie: 0.2 + this.alea()*0.18, max: 0.38 });
   }
   blesser(source, degats){
     if (this.invuln > 0 || this.etat !== 'jeu') return;
@@ -881,25 +997,48 @@ class Combat extends Phaser.Scene {
       this.arme = o.type;
       majBoutonArme(this.arme, this.munitions);
       SON.jouer('arme');
-      this.message(a.nom + '  —  ✕ POUR TIRER  ×' + this.munitions);
+      this.message(a.nom + '  —  □ POUR TIRER  ×' + this.munitions);
     }
     o.pris = true;
     o.go.destroy();
   }
   message(txt){ this.msg = { t:0 }; this.hudMsg.setText(txt).setAlpha(1); }
 
-  // ── mort et réapparition ────────────────────────────────────
+  // ── étages, mort, victoire ──────────────────────────────────
+  sauvegarder(){
+    PARTIE.pv = this.pv; PARTIE.arme = this.arme; PARTIE.munitions = this.munitions;
+    PARTIE.vaincus = this.vaincus; PARTIE.morts = this.morts;
+  }
   majRecord(){
     const r = lireRecord();
-    const m = Math.max(0, Math.round((this.joueur.x - 120) / 10));
-    const n = { monstres: Math.max(r.monstres, this.vaincus), metres: Math.max(r.metres, m) };
-    if (n.monstres !== r.monstres || n.metres !== r.metres) ecrireRecord(n);
+    const n = { monstres: Math.max(r.monstres, this.vaincus), etage: Math.max(r.etage, PARTIE.niveau) };
+    if (n.monstres !== r.monstres || n.etage !== r.etage) ecrireRecord(n);
     return n;
+  }
+  monterEtage(){
+    if (this.etat !== 'jeu') return;
+    this.etat = 'monte';
+    this.transition = 0;
+    this.sauvegarder();
+    this.majRecord();
+    SON.jouer('ascenseur');
+    const suivant = NIVEAUX[PARTIE.niveau + 1];
+    this.hudFin.setText((this.def.sortie === 'echelle' ? 'Tu grimpes' : 'L\'ascenseur monte')
+      + '\n\n' + suivant.nom + '\n' + suivant.sous);
+  }
+  gagnerPartie(){
+    this.etat = 'fini';
+    this.sauvegarder();
+    const r = this.majRecord();
+    SON.jouer('final');
+    this.hudFin.setText('LE TOIT EST À TOI\n' + this.vaincus + ' monstres vaincus'
+      + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
   }
   terminer(titre){
     this.etat = 'perdu';
     this.morts++;
     SON.jouer('mort');
+    this.sauvegarder();
     const r = this.majRecord();
     this.hudFin.setText(titre + '\n' + this.vaincus + ' monstres vaincus'
       + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour repartir d\'ici');
@@ -917,15 +1056,16 @@ class Combat extends Phaser.Scene {
     this.joueur.body.reset(this.checkpoint.x, this.checkpoint.y);
     this.cameras.main.centerOn(this.checkpoint.x, this.checkpoint.y);
     for (const m of this.monstres){
-      if (Math.abs(m.go.x - this.checkpoint.x) < 160){
+      if (!m.def.fixe && Math.abs(m.go.x - this.checkpoint.x) < 160){
         const d = Math.sign(m.go.x - this.checkpoint.x) || 1;
         m.go.body.setVelocity(d * 280, m.def.vole ? 0 : -220);
-        m.assomme = 0.6;
+        m.assomme = 0.6; m.prepare = 0;
       }
     }
   }
-  nouvellePartie(){
+  recommencer(){
     GRAINE = (Math.random() * 1e9) | 0;
+    PARTIE = nouvellePartieEtat();
     afficherRecord();
     this.scene.restart();
   }
@@ -935,12 +1075,25 @@ class Combat extends Phaser.Scene {
     const dt = Math.min(0.033, deltaMs / 1000);
     const b = this.joueur.body;
 
+    if (this.etat === 'monte'){
+      // l'ascenseur prend son temps, puis l'étage suivant se construit
+      this.transition += dt;
+      if (this.transition > 1.9){
+        PARTIE.niveau++;
+        this.scene.restart();
+        return;
+      }
+      ENTREE.validePresse = false; ENTREE.coupPresse = null; ENTREE.hautPresse = false;
+      this.majEclats(dt); this.dessinerTout(b);
+      return;
+    }
+
     if (this.etat !== 'jeu'){
       if (ENTREE.validePresse){
         ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
         ENTREE.hautPresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
-        else this.nouvellePartie();
+        else this.recommencer();
         return;
       }
       ENTREE.coupPresse = null; ENTREE.hautPresse = false; ENTREE.sautPresse = false;
@@ -952,10 +1105,8 @@ class Combat extends Phaser.Scene {
     const auSol = b.blocked.down || b.touching.down;
     this.accroupi = ENTREE.accroupi && auSol;
 
-    // la flèche du haut donne l'uppercut, le seul coup qui monte au-dessus de la tête
     if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
     if (ENTREE.coupPresse){
-      // le poing laisse la place à l'arme tant qu'il en reste des munitions
       if (ENTREE.coupPresse === 'poing' && this.arme) this.utiliserArme();
       else this.lancerAttaque(ENTREE.coupPresse);
       ENTREE.coupPresse = null;
@@ -996,14 +1147,20 @@ class Combat extends Phaser.Scene {
     const vx = b.velocity.x;
     b.setVelocityX(Math.abs(cible - vx) <= a ? cible : vx + Math.sign(cible - vx) * a);
 
+    // sauts : un au sol, un en l'air
+    if (auSol) this.sautsAir = 1;
     this.coyote = auSol ? CFG.coyote : Math.max(0, this.coyote - dt);
     if (ENTREE.sautPresse){ ENTREE.sautPresse = false; this.buffer = CFG.bufferSaut; }
     this.buffer = Math.max(0, this.buffer - dt);
-    // accroupi, on ne saute pas : le joystick ne peut pas être en haut et en bas
     if (this.buffer > 0 && this.coyote > 0){
       b.setVelocityY(-CFG.vitesseSaut);
       this.coyote = 0; this.buffer = 0; this.squash = -1;
       SON.jouer('saut');
+    } else if (this.buffer > 0 && this.sautsAir > 0){
+      b.setVelocityY(-CFG.sautAerien);
+      this.sautsAir--; this.buffer = 0; this.squash = -1;
+      SON.jouer('saut2');
+      this.eclat(this.joueur.x, this.joueur.y + PIEDS, 0, 6, 0x9fb4ff);
     }
     if (!ENTREE.saut && b.velocity.y < -CFG.coupureSaut) b.setVelocityY(-CFG.coupureSaut);
 
@@ -1013,7 +1170,12 @@ class Combat extends Phaser.Scene {
     if (auSol) this.phase += (Math.abs(b.velocity.x) * dt) / 27;
     this.invuln = Math.max(0, this.invuln - dt);
 
-    // dernier sol foulé = point de réapparition
+    // poussière à chaque appui de pied quand on court vite
+    const sPhase = Math.sin(this.phase);
+    if (auSol && Math.abs(b.velocity.x) > CFG.vitesseCourse * 0.55 && this.sAvant * sPhase <= 0 && !this.accroupi)
+      this.poussiere(b.velocity.x);
+    this.sAvant = sPhase;
+
     if (auSol && Math.abs(b.velocity.y) < 40){
       this.checkpoint.x = this.joueur.x;
       this.checkpoint.y = this.joueur.y;
@@ -1040,12 +1202,15 @@ class Combat extends Phaser.Scene {
     }
 
     if (this.joueur.y > H + 40) this.terminer('Tombé dans le vide');
-    if (this.joueur.x > this.finX){
-      this.etat = 'gagne';
-      SON.jouer('gagne');
-      const r = this.majRecord();
-      this.hudFin.setText('Zone franchie\n' + this.vaincus + ' monstres vaincus'
-        + '\nrecord ' + r.monstres + '\n\n↑ pour un nouveau niveau');
+    // la sortie : porte, ascenseur ou échelle, mais seulement une fois
+    // le boss de l'étage à terre
+    if (this.def.sortie !== 'patron' && Math.abs(this.joueur.x - this.sortieX) < 34){
+      if (this.bossVivant){
+        if (!this.avertiBoss){
+          this.avertiBoss = true;
+          this.message(MONSTRES[this.def.boss].nom + ' GARDE LA SORTIE');
+        }
+      } else this.monterEtage();
     }
 
     this.majEclats(dt);
@@ -1058,28 +1223,67 @@ class Combat extends Phaser.Scene {
       m.flash  = Math.max(0, m.flash - dt);
       m.blinde = Math.max(0, m.blinde - dt);
       m.phase += dt * 5;
-      if (m.assomme > 0) m.assomme -= dt;
-      else {
-        const dx = this.joueur.x - m.go.x;
-        const memeNiveau = Math.abs(this.joueur.y - m.go.y) < 110;
-        let v;
-        if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse;
-        else {
-          if (m.go.x < m.minX) m.dir = 1;
-          if (m.go.x > m.maxX) m.dir = -1;
-          v = m.dir * m.def.patrouille;
+      const dx = this.joueur.x - m.go.x;
+      const memeNiveau = Math.abs(this.joueur.y - m.go.y) < 110;
+
+      if (m.def.fixe){
+        this.majTourelle(m, dt, dx, memeNiveau);
+      } else if (m.assomme > 0){
+        m.assomme -= dt;
+      } else if (m.prepare > 0){
+        // le gardien s'est ramassé : il ne bouge plus, puis se détend
+        m.prepare -= dt;
+        m.go.body.setVelocityX(0);
+        if (m.prepare <= 0){
+          m.go.body.setVelocity(Math.sign(dx || 1) * m.def.charge.elan, -180);
+          m.assomme = 0.45;
         }
-        if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
-        m.go.body.setVelocityX(v);
-        // le drone ne tombe pas : il revient toujours à sa hauteur de vol
-        if (m.def.vole){
-          const vise = m.baseY + Math.sin(m.phase * 0.7) * 7;
-          m.go.body.setVelocityY((vise - m.go.y) * 4);
+      } else {
+        m.repos = Math.max(0, m.repos - dt);
+        const ch = m.def.charge;
+        if (ch && m.repos <= 0 && Math.abs(dx) < ch.portee && memeNiveau){
+          m.prepare = ch.preparation; m.repos = ch.repos;
+          m.go.body.setVelocityX(0);
+          SON.jouer('charge');
+        } else {
+          let v;
+          if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse;
+          else {
+            if (m.go.x < m.minX) m.dir = 1;
+            if (m.go.x > m.maxX) m.dir = -1;
+            v = m.dir * m.def.patrouille;
+          }
+          if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
+          m.go.body.setVelocityX(v);
+          if (m.def.vole){
+            const vise = m.baseY + Math.sin(m.phase * 0.7) * 7;
+            m.go.body.setVelocityY((vise - m.go.y) * 4);
+          }
         }
       }
+
       if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds()))
         this.blesser(m.go.x, m.def.degats);
       if (m.go.y > H + 200){ m.mort = true; m.go.destroy(); }
+    }
+  }
+  majTourelle(m, dt, dx, memeNiveau){
+    const c = m.def.canon;
+    m.repos = Math.max(0, m.repos - dt);
+    if (m.vise > 0){
+      m.vise -= dt;
+      if (m.vise <= 0){
+        const dy = (this.joueur.y - 10) - (m.go.y - 6);
+        const d = Math.hypot(dx, dy) || 1;
+        this.tirsEnnemis.push({
+          x:m.go.x + Math.sign(dx || 1)*12, y:m.go.y - 6,
+          vx: dx/d * c.vitesse, vy: dy/d * c.vitesse, vie:2.2,
+        });
+        SON.jouer('tirEnnemi');
+      }
+    } else if (m.repos <= 0 && Math.abs(dx) < c.portee && memeNiveau){
+      m.vise = c.visee; m.repos = c.repos;
+      SON.jouer('visee');
     }
   }
 
@@ -1107,6 +1311,19 @@ class Combat extends Phaser.Scene {
       }
     }
     this.tirs = this.tirs.filter(t => !t.fini);
+
+    for (const t of this.tirsEnnemis){
+      t.vie -= dt;
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      if (t.vie <= 0){ t.fini = true; continue; }
+      const boite = new Phaser.Geom.Rectangle(t.x - 5, t.y - 5, 10, 10);
+      if (Phaser.Geom.Intersects.RectangleToRectangle(boite, this.joueur.getBounds())){
+        this.blesser(t.x, 1);
+        t.fini = true;
+      }
+    }
+    this.tirsEnnemis = this.tirsEnnemis.filter(t => !t.fini);
   }
 
   majEclats(dt){
@@ -1116,7 +1333,11 @@ class Combat extends Phaser.Scene {
 
   // ── rendu ───────────────────────────────────────────────────
   dessinerTout(b){
-    this.dessinerFond(this.cameras.main.scrollX);
+    const sx = this.cameras.main.scrollX;
+    if (this.def.decor === 'interieur') this.dessinerInterieur(sx);
+    else if (this.def.decor === 'toit') this.dessinerToit(sx);
+    else this.dessinerDehors(sx);
+    this.dessinerSortie();
     this.dessinerCaisses();
     this.dessinerMonstres();
     this.dessinerObjets();
@@ -1133,11 +1354,21 @@ class Combat extends Phaser.Scene {
       g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
       g.fillTriangle(x-11, y, x+11, y, x, y+12);
     }
-    let t = 'MONSTRES ' + this.vaincus;
+    let t = this.def.nom + '   MONSTRES ' + this.vaincus;
     if (this.arme) t += '   ' + ARMES[this.arme].nom + ' ' + this.munitions;
-    if (this.accroupi) t += '   ACCROUPI';
     if (this.morts > 0) t += '   K.O. ' + this.morts;
     this.hudTexte.setText(t);
+
+    // barre du boss, seulement quand il est à portée de vue
+    const b = this.boss;
+    if (b && !b.mort && Math.abs(b.go.x - this.joueur.x) < 620){
+      const w = 300, x = (L - w)/2, y = H - 34;
+      g.fillStyle(0x000000, 0.45); g.fillRect(x-4, y-4, w+8, 18);
+      g.fillStyle(0x2a3355, 1);    g.fillRect(x, y, w, 10);
+      g.fillStyle(0xff5e5e, 1);    g.fillRect(x, y, w * Math.max(0, b.pv/b.pvMax), 10);
+      g.fillStyle(0xffffff, 0.18); g.fillRect(x, y, w, 3);
+      this.hudBoss.setText(b.def.nom).setAlpha(1);
+    } else if (this.hudBoss.alpha) this.hudBoss.setAlpha(0);
   }
   dessinerEclats(){
     const g = this.gEclats; g.clear();
@@ -1149,7 +1380,6 @@ class Combat extends Phaser.Scene {
   }
   dessinerTirs(){
     const g = this.gTirs; g.clear();
-    // le laser est un trait instantané, pas un projectile
     if (this.attaque && COUPS[this.attaque.type].faisceau){
       const c = COUPS[this.attaque.type];
       const k = 1 - Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
@@ -1167,8 +1397,15 @@ class Combat extends Phaser.Scene {
       g.fillStyle(t.couleur, 1);    g.fillRect(t.x - 5, t.y - 2, 10, 4);
       g.fillStyle(0xffffff, 0.9);   g.fillRect(t.x - 2, t.y - 1, 4, 2);
     }
+    for (const t of this.tirsEnnemis){
+      g.fillStyle(COUL.tirEnnemi, 0.25); g.fillCircle(t.x, t.y, 9);
+      g.fillStyle(COUL.tirEnnemi, 1);    g.fillCircle(t.x, t.y, 4.5);
+      g.fillStyle(0xffe0d0, 0.95);       g.fillCircle(t.x, t.y, 2);
+    }
   }
-  dessinerFond(sx){
+
+  // ── décors ──────────────────────────────────────────────────
+  dessinerDehors(sx){
     const g = this.fond; g.clear();
     const u = this.urbain(sx + L/2);
     const haut = this.melange(0x0d1120, 0x150d24, u);
@@ -1178,8 +1415,70 @@ class Combat extends Phaser.Scene {
     g.fillStyle(0xffb347, 0.14 - 0.07*u); g.fillCircle(730, 140, 70);
     if (u < 1) this.collines(g, sx*0.12, 0x1d2547, 42, 250, 1 - u);
     this.pylones(g, sx*0.35, this.melange(0x151c38, 0x1a1230, u));
-    if (u > 0) this.ville(g, sx*0.45, u);
+    if (u > 0) this.immeubles(g, sx*0.45, u, 128, 120, 185);
     if (u < 1) this.collines(g, sx*0.55, 0x111730, 26, 320, 1 - u);
+  }
+  dessinerInterieur(sx){
+    const g = this.fond; g.clear();
+    const t = this.def.teinte;
+    g.fillGradientStyle(t.fondHaut, t.fondHaut, t.fondBas, t.fondBas, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+
+    // panneaux muraux
+    const pasP = 168, dP = Math.floor(sx*0.3/pasP) - 1;
+    for (let i = dP; i < dP + Math.ceil(L/pasP) + 3; i++){
+      const x = i*pasP - sx*0.3;
+      g.fillStyle(t.mur, 1);     g.fillRect(x, 44, pasP - 6, SOL_Y - 44);
+      g.fillStyle(t.murHaut, 1); g.fillRect(x, 44, pasP - 6, 4);
+    }
+    // fenêtres : c'est par là qu'on voit qu'on est haut perché
+    const pasF = 330, dF = Math.floor(sx*0.42/pasF) - 1;
+    for (let i = dF; i < dF + Math.ceil(L/pasF) + 3; i++){
+      const x = i*pasF - sx*0.42, y = 104, w = 168, h = 128;
+      g.fillStyle(0x090c18, 1); g.fillRect(x, y, w, h);
+      for (let j = 0; j < 7; j++){
+        const bw = 13 + Math.abs(Math.sin((i*7+j)*3.3))*14;
+        const bh = 26 + Math.abs(Math.cos((i*5+j)*2.7))*76;
+        g.fillStyle(0x1b1430, 1); g.fillRect(x + 5 + j*24, y + h - bh, bw, bh);
+        for (let k = 0; k < 4; k++){
+          const fy = y + h - bh + 7 + k*15;
+          if (fy > y + h - 8) break;
+          if (Math.abs(Math.sin((i*3+j*5+k)*4.1)) < 0.55) continue;
+          g.fillStyle(0xffd98a, 0.75); g.fillRect(x + 8 + j*24, fy, 5, 6);
+        }
+      }
+      g.lineStyle(5, 0x2b3355, 1); g.strokeRect(x, y, w, h);
+      g.lineStyle(3, 0x2b3355, 1);
+      g.beginPath(); g.moveTo(x + w/2, y); g.lineTo(x + w/2, y + h); g.strokePath();
+    }
+    // plafond et néons
+    g.fillStyle(t.plafond, 1); g.fillRect(0, 0, L, 44);
+    const pasN = 215, dN = Math.floor(sx*0.5/pasN) - 1;
+    for (let i = dN; i < dN + Math.ceil(L/pasN) + 3; i++){
+      const x = i*pasN - sx*0.5;
+      // halo en trois bandes de plus en plus pâles : un seul rectangle
+      // translucide donnait une boîte grise, pas une lumière
+      g.fillStyle(t.neon, 0.10); g.fillRect(x - 26, 42, 136, 40);
+      g.fillStyle(t.neon, 0.06); g.fillRect(x - 40, 42, 164, 78);
+      g.fillStyle(t.neon, 0.9);  g.fillRect(x, 36, 84, 6);
+    }
+  }
+  dessinerToit(sx){
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0x06080f, 0x06080f, 0x2c1743, 0x2c1743, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    // étoiles : positions figées par un hachage, pas de tirage au sort
+    for (let i = 0; i < 70; i++){
+      const bx = ((i * 149.7 - sx * 0.06) % (L + 60) + L + 60) % (L + 60) - 30;
+      const by = 16 + ((i * 83.3) % 210);
+      const k = 0.25 + Math.abs(Math.sin(i * 12.9898)) * 0.6;
+      g.fillStyle(0xffffff, k); g.fillRect(bx, by, 2, 2);
+    }
+    g.fillStyle(0xffe9c0, 0.10); g.fillCircle(700, 108, 92);
+    g.fillStyle(0xffe9c0, 0.85); g.fillCircle(700, 108, 54);
+    g.fillStyle(0x2c1743, 0.30); g.fillCircle(676, 96, 44);
+    // les tours voisines : leurs sommets arrivent juste sous nos pieds
+    this.immeubles(g, sx*0.22, 1, 150, 40, 120, SOL_Y + 20);
   }
   collines(g, off, couleur, amp, base, alpha){
     const pts = [{x:0,y:H}];
@@ -1199,16 +1498,17 @@ class Combat extends Phaser.Scene {
       g.fillRect(i*pas - off, SOL_Y - h, w, h);
     }
   }
-  // immeubles à fenêtres allumées : c'est ce qui fait basculer le décor en ville
-  ville(g, off, t){
-    const pas = 128, debut = Math.floor(off/pas) - 1;
+  // immeubles à fenêtres allumées, servent en ville comme sur le toit
+  immeubles(g, off, t, pas, hMin, hVar, base){
+    base = base || SOL_Y;
+    const debut = Math.floor(off/pas) - 1;
     for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
-      const h = 120 + Math.abs(Math.sin(i*7.13))*185;
-      const w =  66 + Math.abs(Math.cos(i*3.71))*44;
-      const x = i*pas - off, y = SOL_Y - h;
+      const h = hMin + Math.abs(Math.sin(i*7.13))*hVar;
+      const w =  62 + Math.abs(Math.cos(i*3.71))*44;
+      const x = i*pas - off, y = base - h;
       g.fillStyle(0x1b1430, t); g.fillRect(x, y, w, h);
       g.fillStyle(0x2a1c46, t); g.fillRect(x, y, w, 5);
-      for (let fy = y + 14; fy < SOL_Y - 18; fy += 24){
+      for (let fy = y + 14; fy < base - 18; fy += 24){
         for (let fx = x + 10; fx < x + w - 13; fx += 20){
           const r = Math.abs(Math.sin(fx*0.37 + fy*0.71 + i*5.1));
           if (r < 0.45) continue;
@@ -1218,6 +1518,61 @@ class Combat extends Phaser.Scene {
       }
     }
   }
+  dessinerSortie(){
+    const g = this.gSortie; g.clear();
+    if (this.def.sortie === 'patron') return;
+    const x = this.sortieX, sol = SOL_Y;
+    // verrouillée tant que le boss tient : elle bat en rouge au lieu de vert
+    const bloquee = this.bossVivant;
+    const pulse = bloquee ? 0 : 0.55 + 0.45 * Math.sin(this.time.now / 260);
+
+    if (this.def.sortie === 'echelle'){
+      g.fillStyle(0x0a0d18, 0.9); g.fillRect(x - 30, sol - 210, 60, 210);
+      g.lineStyle(5, 0x8f9ad0, 1);
+      g.beginPath(); g.moveTo(x - 14, sol); g.lineTo(x - 14, sol - 200); g.strokePath();
+      g.beginPath(); g.moveTo(x + 14, sol); g.lineTo(x + 14, sol - 200); g.strokePath();
+      g.lineStyle(4, 0xb7c0ee, 1);
+      for (let y = sol - 12; y > sol - 200; y -= 22){
+        g.beginPath(); g.moveTo(x - 14, y); g.lineTo(x + 14, y); g.strokePath();
+      }
+      g.fillStyle(0x4dd6c1, 0.3 + 0.3*pulse); g.fillTriangle(x, sol - 216, x - 13, sol - 200, x + 13, sol - 200);
+      return;
+    }
+    if (this.def.sortie === 'porte'){
+      // l'entrée de la tour : un bloc sombre percé d'une porte éclairée
+      g.fillStyle(0x120f22, 1); g.fillRect(x - 90, sol - 300, 180, 300);
+      g.fillStyle(0x1d1836, 1); g.fillRect(x - 90, sol - 300, 180, 8);
+      for (let fy = sol - 280; fy < sol - 120; fy += 30){
+        for (let fx = x - 74; fx < x + 62; fx += 34){
+          if (Math.abs(Math.sin(fx*0.21 + fy*0.37)) < 0.5) continue;
+          g.fillStyle(0xffd98a, 0.6); g.fillRect(fx, fy, 14, 14);
+        }
+      }
+      g.fillStyle(0xffb347, 0.16 + 0.1*pulse); g.fillRect(x - 46, sol - 116, 92, 116);
+      g.fillStyle(0x090c16, 1); g.fillRect(x - 34, sol - 96, 68, 96);
+      g.fillStyle(0xffd98a, 0.35 + 0.35*pulse); g.fillRect(x - 34, sol - 96, 68, 6);
+      g.lineStyle(3, COUL.ceinture, 0.8); g.strokeRect(x - 34, sol - 96, 68, 96);
+      return;
+    }
+    // ascenseur
+    g.fillStyle(0x0d1120, 1);  g.fillRect(x - 44, sol - 132, 88, 132);
+    g.fillStyle(0x2a3152, 1);  g.fillRect(x - 40, sol - 126, 80, 126);
+    g.fillStyle(0x141a30, 1);  g.fillRect(x - 34, sol - 118, 68, 118);
+    g.lineStyle(3, 0x7f8cc4, 1); g.strokeRect(x - 40, sol - 126, 80, 126);
+    g.lineStyle(2, 0x7f8cc4, 0.8);
+    g.beginPath(); g.moveTo(x, sol - 118); g.lineTo(x, sol); g.strokePath();
+    // flèche qui monte
+    g.fillStyle(bloquee ? 0xe2584d : 0x4dd6c1, bloquee ? 0.5 : 0.35 + 0.5*pulse);
+    g.fillTriangle(x, sol - 150, x - 14, sol - 134, x + 14, sol - 134);
+    g.fillStyle(bloquee ? 0xe2584d : 0xffd98a, 0.25 + 0.35*pulse); g.fillRect(x - 40, sol - 138, 80, 5);
+    if (bloquee){
+      // deux barres en croix : la sortie est visiblement condamnée
+      g.lineStyle(5, 0xe2584d, 0.75);
+      g.beginPath(); g.moveTo(x - 34, sol - 110); g.lineTo(x + 34, sol - 14); g.strokePath();
+      g.beginPath(); g.moveTo(x + 34, sol - 110); g.lineTo(x - 34, sol - 14); g.strokePath();
+    }
+  }
+
   dessinerCaisses(){
     const g = this.gCaisses; g.clear();
     for (const k of this.caisses){
@@ -1252,25 +1607,27 @@ class Combat extends Phaser.Scene {
   dessinerMonstres(){
     const g = this.gMonstres; g.clear();
     for (const m of this.monstres){
-      if (m.type === 'drone') this.dessinerDrone(g, m);
+      const s = m.def.silhouette;
+      if (s === 'drone') this.dessinerDrone(g, m);
+      else if (s === 'gardien') this.dessinerGardien(g, m);
+      else if (s === 'tourelle') this.dessinerTourelle(g, m);
       else this.dessinerBrute(g, m);
-      // barre de vie commune
       if (m.pv < m.pvMax){
+        const l = m.def.boss ? m.def.taille[0]*0.6 : 13;
         const x = m.go.x, y = m.go.y - m.def.taille[1]/2 - 12;
-        g.fillStyle(0x2a3355, 1); g.fillRect(x-13, y, 26, 4);
-        g.fillStyle(0xe2584d, 1); g.fillRect(x-13, y, 26 * (m.pv/m.pvMax), 4);
+        g.fillStyle(0x2a3355, 1); g.fillRect(x-l, y, l*2, 4);
+        g.fillStyle(m.def.boss ? 0xff5e5e : 0xe2584d, 1); g.fillRect(x-l, y, l*2 * (m.pv/m.pvMax), 4);
       }
     }
   }
-  // baveux et colosse partagent la même silhouette, à l'échelle près
   dessinerBrute(g, m){
-    const gros = m.type === 'colosse';
-    const e = gros ? 1.45 : 1;
+    const gros = !!m.def.gros;
+    const e = m.def.taille[0] / 26;   // l'échelle découle de la taille déclarée
     const x = m.go.x, y = m.go.y + m.def.taille[1]/2;
     const dandine = Math.sin(m.phase) * 2;
     const eclaire = m.flash > 0 ? 0xffffff : (m.blinde > 0 ? COUL.blinde : null);
-    const corps = eclaire || (gros ? COUL.colosse : COUL.baveux);
-    const ombre = eclaire || (gros ? COUL.colosseOmbre : COUL.baveuxOmbre);
+    const corps = eclaire || m.def.couleur || (gros ? COUL.colosse : COUL.baveux);
+    const ombre = eclaire || m.def.ombre   || (gros ? COUL.colosseOmbre : COUL.baveuxOmbre);
     g.fillStyle(0x000000, 0.25); g.fillEllipse(x, y+1, 26*e, 6*e);
     g.fillStyle(ombre, 1);
     g.fillEllipse(x-6*e, y-3*e, 8*e, 8*e); g.fillEllipse(x+6*e, y-3*e, 8*e, 8*e);
@@ -1279,7 +1636,7 @@ class Combat extends Phaser.Scene {
     g.fillTriangle(x-11*e, y-22*e+dandine, x-5*e, y-34*e+dandine, x-2*e, y-21*e+dandine);
     g.fillTriangle(x+11*e, y-22*e+dandine, x+5*e, y-34*e+dandine, x+2*e, y-21*e+dandine);
     const vers = Math.sign(this.joueur.x - x) || 1;
-    g.fillStyle(gros ? COUL.colosseOeil : COUL.baveuxOeil, 1);
+    g.fillStyle(m.def.boss ? 0xffd166 : gros ? COUL.colosseOeil : COUL.baveuxOeil, 1);
     g.fillCircle(x + vers*3 - 4*e, y-17*e+dandine, 3*e);
     g.fillCircle(x + vers*3 + 4*e, y-17*e+dandine, 3*e);
     g.fillStyle(0x1a0f22, 1);
@@ -1290,36 +1647,84 @@ class Combat extends Phaser.Scene {
     const x = m.go.x, y = m.go.y;
     const flotte = Math.sin(m.phase) * 2;
     const eclaire = m.flash > 0 ? 0xffffff : (m.blinde > 0 ? COUL.blinde : null);
-    const corps = eclaire || COUL.drone;
-    // ombre portée au sol, très étalée : on voit qu'il vole
     g.fillStyle(0x000000, 0.18); g.fillEllipse(x, SOL_Y - 3, 26, 5);
     g.fillStyle(eclaire || COUL.droneOmbre, 1);
     g.fillRoundedRect(x-15, y-4+flotte, 30, 9, 4);
-    g.fillStyle(corps, 1);
+    g.fillStyle(eclaire || COUL.drone, 1);
     g.fillRoundedRect(x-13, y-13+flotte, 26, 20, 7);
-    // visière
     const vers = Math.sign(this.joueur.x - x) || 1;
     g.fillStyle(0x11142a, 1); g.fillRoundedRect(x-9, y-9+flotte, 18, 7, 3);
     g.fillStyle(COUL.droneOeil, 1); g.fillRect(x - 3 + vers*3, y-8+flotte, 7, 3);
-    // hélices : deux traits qui battent
     const bat = Math.sin(m.phase * 6) * 5;
     g.lineStyle(2, eclaire || COUL.droneOmbre, 0.9);
     g.beginPath(); g.moveTo(x-16-bat, y-15+flotte); g.lineTo(x-6+bat, y-15+flotte); g.strokePath();
     g.beginPath(); g.moveTo(x+6-bat, y-15+flotte); g.lineTo(x+16+bat, y-15+flotte); g.strokePath();
   }
+  dessinerGardien(g, m){
+    const e = m.def.taille[0] / 28;
+    const x = m.go.x, y = m.go.y + m.def.taille[1]/2;
+    const eclaire = m.flash > 0 ? 0xffffff : (m.blinde > 0 ? COUL.blinde : null);
+    // quand il se ramasse avant de bondir, il s'accroupit et clignote :
+    // c'est le signal qu'il faut sauter ou reculer
+    const p = m.prepare > 0 ? 1 - m.prepare / m.def.charge.preparation : 0;
+    const tasse = m.prepare > 0 ? (7 * (1 - Math.abs(p - 0.5) * 2) + 5) * e : 0;
+    const alerte = m.prepare > 0 && Math.floor(m.prepare * 14) % 2 === 0;
+    const corps = eclaire || (alerte ? 0xffe9b0 : (m.def.couleur || COUL.gardien));
+    const dandine = Math.sin(m.phase) * 1.5;
+    g.fillStyle(0x000000, 0.25); g.fillEllipse(x, y+1, 26*e, 6*e);
+    g.fillStyle(eclaire || m.def.ombre || COUL.gardienOmbre, 1);
+    g.fillRect(x-11*e, y-9*e+tasse, 8*e, 9*e); g.fillRect(x+3*e, y-9*e+tasse, 8*e, 9*e);
+    g.fillStyle(corps, 1);
+    g.fillRoundedRect(x-12*e, y-32*e+tasse+dandine, 24*e, 25*e, 5);
+    g.fillStyle(eclaire || COUL.gardienOmbre, 1);
+    g.fillRect(x-14*e, y-30*e+tasse+dandine, 28*e, 5*e);
+    // casque à visière
+    const vers = Math.sign(this.joueur.x - x) || 1;
+    g.fillStyle(corps, 1); g.fillRoundedRect(x-9*e, y-45*e+tasse+dandine, 18*e, 14*e, 5);
+    g.fillStyle(0x0d1120, 1); g.fillRect(x-8*e, y-40*e+tasse+dandine, 16*e, 6*e);
+    g.fillStyle(COUL.gardienVisiere, alerte ? 1 : 0.85);
+    g.fillRect(x - 5*e + vers*3, y-39*e+tasse+dandine, 8*e, 4*e);
+    // matraque
+    g.lineStyle(4*e, eclaire || 0x1d2340, 1);
+    g.beginPath(); g.moveTo(x + vers*10*e, y-24*e+tasse+dandine);
+    g.lineTo(x + vers*(18 + (m.prepare > 0 ? -6 : 0))*e, y-14*e+tasse+dandine); g.strokePath();
+  }
+  dessinerTourelle(g, m){
+    const e = m.def.taille[0] / 30;
+    const x = m.go.x, y = m.go.y + m.def.taille[1]/2;
+    const eclaire = m.flash > 0 ? 0xffffff : (m.blinde > 0 ? COUL.blinde : null);
+    const c = m.def.canon;
+    const charge = m.vise > 0 ? 1 - m.vise / c.visee : 0;
+    g.fillStyle(0x000000, 0.25); g.fillEllipse(x, y+1, 30*e, 6*e);
+    g.fillStyle(eclaire || m.def.ombre || COUL.tourelleOmbre, 1); g.fillRect(x-15*e, y-10*e, 30*e, 10*e);
+    g.fillStyle(eclaire || m.def.couleur || COUL.tourelle, 1); g.fillRoundedRect(x-12*e, y-26*e, 24*e, 18*e, 5);
+    // le canon suit le joueur : on voit qu'on est visé avant de prendre le tir
+    const dx = this.joueur.x - x, dy = (this.joueur.y - 10) - (y - 20*e);
+    const ang = Math.atan2(dy, dx);
+    const lx = x + Math.cos(ang)*20*e, ly = (y-20*e) + Math.sin(ang)*20*e;
+    g.lineStyle(7*e, eclaire || m.def.ombre || COUL.tourelleOmbre, 1);
+    g.beginPath(); g.moveTo(x, y-20*e); g.lineTo(lx, ly); g.strokePath();
+    if (m.vise > 0){
+      g.fillStyle(COUL.tourelleOeil, 0.25 + 0.5*charge); g.fillCircle(lx, ly, 4 + charge*7);
+      g.lineStyle(1.5, COUL.tourelleOeil, 0.25 + 0.45*charge);
+      g.beginPath(); g.moveTo(lx, ly);
+      g.lineTo(lx + Math.cos(ang)*260, ly + Math.sin(ang)*260); g.strokePath();
+    }
+    g.fillStyle(COUL.tourelleOeil, m.vise > 0 ? 1 : 0.55); g.fillCircle(x, y-20*e, 3.5*e);
+  }
+
   dessinerPerso(b){
     const g = this.perso; g.clear();
     const auSol = b.blocked.down || b.touching.down;
     const t = this.phase;
     const marche = Math.abs(b.velocity.x) > 20;
     let pieds, mains, inclinaison = -0.03;
-    // allure : 0 à l'arrêt, 1 joystick à fond. Toute l'animation de course
-    // en découle, il n'y a pas deux poses distinctes marche et course.
     const allure = Math.min(1, Math.abs(b.velocity.x) / CFG.vitesseCourse);
     const rampe = this.accroupi && marche;
-    // accroupi le corps descend ; en courant il rebondit à chaque foulée
     let tasse = this.accroupi ? (rampe ? 13 : 9) : 0;
-    if (!this.accroupi && auSol && marche) tasse -= Math.abs(Math.sin(t)) * allure * 2.5;
+    // le corps s'enfonce au milieu de l'appui et se déplie à la poussée :
+    // c'est ce rebond, plus que les jambes, qui donne la course
+    if (!this.accroupi && auSol && marche) tasse += Math.abs(Math.sin(t)) * allure * 2.6;
 
     if (this.attaque){
       const c = COUPS[this.attaque.type];
@@ -1334,20 +1739,17 @@ class Combat extends Phaser.Scene {
         pieds = [[-6, 0], [6 + ext*26, -6 - ext*14]];
         inclinaison = 0.04 + ext*0.12;
       } else if (this.attaque.type === 'crochet'){
-        // uppercut : le bras ne peut pas dépasser le sommet du crâne, sa
-        // longueur l'en empêche. C'est le corps qui se soulève avec le coup
-        // pour que le geste se lise.
+        // le bras ne peut pas dépasser le sommet du crâne, sa longueur
+        // l'en empêche : c'est le corps qui se soulève avec le coup
         mains = [[-7 + ext*2, EPAULE + 12], [5 + ext*3, EPAULE - 4 - ext*22]];
         pieds = [[-8, 0], [7, -ext*3]];
         inclinaison = 0.02 - ext*0.10;
         tasse -= ext * 4;
       } else if (c.faisceau || c.tir){
-        // bras tendu, arme en avant
         mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
         pieds = [[-9, 0], [8, 0]];
         inclinaison = -0.04 - ext*0.03;
       } else {
-        // coup retourné : la jambe balaie de l'arrière vers l'avant
         const balai = -1 + 2*p;
         mains = [[-12*balai, EPAULE + 4], [12*balai, EPAULE + 6]];
         pieds = [[-4, 0], [balai*30, -14 - Math.sin(Math.PI*p)*8]];
@@ -1357,7 +1759,6 @@ class Combat extends Phaser.Scene {
       pieds = b.velocity.y < 0 ? [[-7,-3],[7,-9]] : [[-8,-7],[9,-1]];
       mains = b.velocity.y < 0 ? [[-6,EPAULE+7],[8,EPAULE-9]] : [[-9,EPAULE-5],[8,EPAULE+5]];
     } else if (rampe){
-      // ramper : le buste bascule à l'horizontale, bras et jambes alternent
       pieds = []; mains = [];
       for (const dec of [Math.PI, 0]){
         const p = t * 2.2 + dec;
@@ -1370,18 +1771,22 @@ class Combat extends Phaser.Scene {
       mains = [[-8, EPAULE + 15], [9, EPAULE + 14]];
       inclinaison = -0.10;
     } else if (marche){
-      // plus on va vite, plus la foulée s'allonge, le genou monte,
-      // les bras pompent et le buste se penche en avant
-      const foulee = 7 + allure * 7;
-      const genou  = 6 + allure * 13;
-      const bras   = 6 + allure * 7;
+      // appui, passage, poussée. Le pied colle au sol tant qu'il pousse,
+      // puis se lève d'un coup — d'où l'exposant sur la levée.
+      const foulee = 8 + allure * 8;
+      const genou  = 5 + allure * 16;
+      const bras   = 5 + allure * 8;
       pieds = []; mains = [];
       for (const dec of [Math.PI, 0]){
         const p = t + dec;
-        pieds.push([-Math.cos(p)*foulee, Math.sin(p) > 0 ? -Math.sin(p)*genou : 0]);
-        mains.push([Math.cos(p)*bras, EPAULE + 13 - Math.max(0, Math.sin(p))*(3 + allure*7)]);
+        const s = Math.sin(p);
+        const leve = Math.max(0, s);
+        pieds.push([-Math.cos(p)*foulee, -Math.pow(leve, 0.62) * genou]);
+        // bras en opposition, la main passe devant la poitrine à la montée
+        mains.push([Math.cos(p)*bras + allure*2,
+                    EPAULE + 12 - Math.max(0, s)*(2 + allure*6) - allure*2]);
       }
-      inclinaison = -0.05 - allure*0.12;
+      inclinaison = -0.05 - allure*0.11;
     } else {
       const souffle = Math.sin(this.time.now / 420) * 1.2;
       pieds = [[-6, 0], [6, 0]];
@@ -1409,7 +1814,6 @@ class Combat extends Phaser.Scene {
     this.membre(g, 1, HA, pieds[1][0], pieds[1][1], 9.5, 9.5, -1, COUL.gi, COUL.gi, 9, 7.5);
     g.fillStyle(COUL.botte, 1); g.fillEllipse(pieds[1][0]+1, pieds[1][1]-1.5, 11, 6.4);
     this.membre(g, 1, EP, mains[1][0], my(1), 8, 8, 1, COUL.gi, COUL.peau, 7.5, 5.5);
-    // l'arme se voit dans la main dès qu'on en a une
     if (this.arme){
       const a = ARMES[this.arme];
       g.fillStyle(a.couleur, 1); g.fillCircle(mains[1][0], my(1), 4.4);
@@ -1462,6 +1866,7 @@ function demarrer(){
   ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false;
   ENTREE.accroupi = false; ENTREE.coupPresse = null;
   ENTREE.haut = false; ENTREE.hautPresse = false; ENTREE.validePresse = false;
+  PARTIE = nouvellePartieEtat();
 
   partie = new Phaser.Game({
     type: Phaser.AUTO,
