@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- Page générée par combat/outils/build.mjs : ne pas éditer à la main,
+     modifier combat/src/ puis relancer  node combat/outils/build.mjs  -->
 <html lang="fr">
 <head>
 <meta charset="utf-8">
@@ -232,6 +234,7 @@ if (typeof Phaser === 'undefined'){
 </script>
 
 <script>
+// ═══════════════ src/version.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // VERSION ET CACHE
 // Le numéro est affiché sur l'écran-titre : il suffit de le lire pour
@@ -240,7 +243,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '8';
+const VERSION = '9';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -268,6 +271,7 @@ const VERSION = '8';
   if (el) el.textContent = 'v' + VERSION;
 })();
 
+// ═══════════════ src/reglages.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // RÉGLAGES
 // ─────────────────────────────────────────────────────────────
@@ -341,6 +345,29 @@ const MONSTRES = {
               nom:'LE PATRON',               couleur:0x9b2f2f, ombre:0x631d1d },
 };
 
+const L = 900, H = 480, SOL_Y = 380;
+
+const COUL = {
+  sol:0x0a0d1a, solBord:0x39457a, plat:0x16463f, platBord:0x4dd6c1,
+  solVille:0x121018, solBordVille:0xe0a44c,
+  solDedans:0x1a1f38, solBordDedans:0x5a6ea8,
+  solToit:0x23283f,   solBordToit:0x8f9ad0,
+  gi:0xf2e6cf, giOmbre:0xd3c0a0, ceinture:0xff9d2e,
+  peau:0xf0c090, peauOmbre:0xc9a377, cheveux:0x181d30, col:0x2b7d72, botte:0x232a45,
+  baveux:0x7b3f8f, baveuxOmbre:0x552a63, baveuxOeil:0xffe08a,
+  drone:0x39406b, droneOmbre:0x252a4a, droneOeil:0xff5e5e,
+  colosse:0x8f4a3f, colosseOmbre:0x612f28, colosseOeil:0xffe08a,
+  gardien:0x2f6d8f, gardienOmbre:0x1d4560, gardienVisiere:0x8fe6ff,
+  tourelle:0x4a4f6b, tourelleOmbre:0x2e3248, tourelleOeil:0xff5e5e,
+  patron:0x9b2f2f, patronOmbre:0x631d1d,
+  bois:0x8a5a2b, boisClair:0xb07a3e, boisOmbre:0x6d4420,
+  blinde:0x6f9bff,
+  poussiere:0x6b7399,
+  tirEnnemi:0xff6b5e,
+};
+const HANCHE = -19, EPAULE = -30, TETE = -35;
+
+// ═══════════════ src/niveaux.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // LES ÉTAGES
 // On part de la rue, on entre dans l'immeuble, et on monte jusqu'au toit.
@@ -367,28 +394,7 @@ const NIVEAUX = [
     peuple:['drone','drone','gardien'], boss:'patron' },
 ];
 
-const L = 900, H = 480, SOL_Y = 380;
-
-const COUL = {
-  sol:0x0a0d1a, solBord:0x39457a, plat:0x16463f, platBord:0x4dd6c1,
-  solVille:0x121018, solBordVille:0xe0a44c,
-  solDedans:0x1a1f38, solBordDedans:0x5a6ea8,
-  solToit:0x23283f,   solBordToit:0x8f9ad0,
-  gi:0xf2e6cf, giOmbre:0xd3c0a0, ceinture:0xff9d2e,
-  peau:0xf0c090, peauOmbre:0xc9a377, cheveux:0x181d30, col:0x2b7d72, botte:0x232a45,
-  baveux:0x7b3f8f, baveuxOmbre:0x552a63, baveuxOeil:0xffe08a,
-  drone:0x39406b, droneOmbre:0x252a4a, droneOeil:0xff5e5e,
-  colosse:0x8f4a3f, colosseOmbre:0x612f28, colosseOeil:0xffe08a,
-  gardien:0x2f6d8f, gardienOmbre:0x1d4560, gardienVisiere:0x8fe6ff,
-  tourelle:0x4a4f6b, tourelleOmbre:0x2e3248, tourelleOeil:0xff5e5e,
-  patron:0x9b2f2f, patronOmbre:0x631d1d,
-  bois:0x8a5a2b, boisClair:0xb07a3e, boisOmbre:0x6d4420,
-  blinde:0x6f9bff,
-  poussiere:0x6b7399,
-  tirEnnemi:0xff6b5e,
-};
-const HANCHE = -19, EPAULE = -30, TETE = -35;
-
+// ═══════════════ src/partie.js ═══════════════
 // Le niveau est tiré au sort, mais toujours à partir de cette graine :
 // mourir et réapparaître ne doit pas redessiner le monde sous nos pieds.
 let GRAINE = (Math.random() * 1e9) | 0;
@@ -430,6 +436,7 @@ function afficherRecord(){
 }
 afficherRecord();
 
+// ═══════════════ src/son.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // SON
 // Tout est synthétisé à la volée : aucun fichier à charger, donc le
@@ -506,6 +513,7 @@ const SON = {
   },
 };
 
+// ═══════════════ src/entrees.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // ZOOM
 // iOS ignore user-scalable=no depuis iOS 10, et touch-action n'a été
@@ -647,6 +655,7 @@ addEventListener('keyup', e => {
   if (e.code === 'Space') ENTREE.saut = false;
 });
 
+// ═══════════════ src/moteur.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // SCÈNE
 // ─────────────────────────────────────────────────────────────
@@ -1330,6 +1339,16 @@ class Combat extends Phaser.Scene {
     for (const e of this.eclats){ e.vie -= dt; e.vy += 900*dt; e.x += e.vx*dt; e.y += e.vy*dt; }
     this.eclats = this.eclats.filter(e => e.vie > 0);
   }
+}
+
+// ═══════════════ src/rendu.js ═══════════════
+// ─────────────────────────────────────────────────────────────
+// RENDU
+// Greffé sur la scène par le build : moteur.js déclare la classe,
+// ce fichier lui ajoute tout le dessin. L'assemblage les met dans le
+// même script, donc la même portée.
+// ─────────────────────────────────────────────────────────────
+Object.assign(Combat.prototype, {
 
   // ── rendu ───────────────────────────────────────────────────
   dessinerTout(b){
@@ -1345,7 +1364,7 @@ class Combat extends Phaser.Scene {
     this.dessinerEclats();
     this.dessinerTirs();
     this.dessinerHud();
-  }
+  },
   dessinerHud(){
     const g = this.hud; g.clear();
     for (let i = 0; i < CFG.pvJoueur; i++){
@@ -1369,7 +1388,7 @@ class Combat extends Phaser.Scene {
       g.fillStyle(0xffffff, 0.18); g.fillRect(x, y, w, 3);
       this.hudBoss.setText(b.def.nom).setAlpha(1);
     } else if (this.hudBoss.alpha) this.hudBoss.setAlpha(0);
-  }
+  },
   dessinerEclats(){
     const g = this.gEclats; g.clear();
     for (const e of this.eclats){
@@ -1377,7 +1396,7 @@ class Combat extends Phaser.Scene {
       g.fillStyle(e.couleur, k);
       g.fillRect(e.x-2, e.y-2, 3 + k*2, 3 + k*2);
     }
-  }
+  },
   dessinerTirs(){
     const g = this.gTirs; g.clear();
     if (this.attaque && COUPS[this.attaque.type].faisceau){
@@ -1402,7 +1421,7 @@ class Combat extends Phaser.Scene {
       g.fillStyle(COUL.tirEnnemi, 1);    g.fillCircle(t.x, t.y, 4.5);
       g.fillStyle(0xffe0d0, 0.95);       g.fillCircle(t.x, t.y, 2);
     }
-  }
+  },
 
   // ── décors ──────────────────────────────────────────────────
   dessinerDehors(sx){
@@ -1417,7 +1436,7 @@ class Combat extends Phaser.Scene {
     this.pylones(g, sx*0.35, this.melange(0x151c38, 0x1a1230, u));
     if (u > 0) this.immeubles(g, sx*0.45, u, 128, 120, 185);
     if (u < 1) this.collines(g, sx*0.55, 0x111730, 26, 320, 1 - u);
-  }
+  },
   dessinerInterieur(sx){
     const g = this.fond; g.clear();
     const t = this.def.teinte;
@@ -1462,7 +1481,7 @@ class Combat extends Phaser.Scene {
       g.fillStyle(t.neon, 0.06); g.fillRect(x - 40, 42, 164, 78);
       g.fillStyle(t.neon, 0.9);  g.fillRect(x, 36, 84, 6);
     }
-  }
+  },
   dessinerToit(sx){
     const g = this.fond; g.clear();
     g.fillGradientStyle(0x06080f, 0x06080f, 0x2c1743, 0x2c1743, 1);
@@ -1479,7 +1498,7 @@ class Combat extends Phaser.Scene {
     g.fillStyle(0x2c1743, 0.30); g.fillCircle(676, 96, 44);
     // les tours voisines : leurs sommets arrivent juste sous nos pieds
     this.immeubles(g, sx*0.22, 1, 150, 40, 120, SOL_Y + 20);
-  }
+  },
   collines(g, off, couleur, amp, base, alpha){
     const pts = [{x:0,y:H}];
     for (let x = 0; x <= L; x += 8){
@@ -1488,7 +1507,7 @@ class Combat extends Phaser.Scene {
     }
     pts.push({x:L,y:H});
     g.fillStyle(couleur, alpha); g.fillPoints(pts, true);
-  }
+  },
   pylones(g, off, couleur){
     const pas = 165, debut = Math.floor(off/pas) - 1;
     g.fillStyle(couleur, 1);
@@ -1497,7 +1516,7 @@ class Combat extends Phaser.Scene {
       const w = 30 + Math.abs(Math.cos(i*4.1414))*24;
       g.fillRect(i*pas - off, SOL_Y - h, w, h);
     }
-  }
+  },
   // immeubles à fenêtres allumées, servent en ville comme sur le toit
   immeubles(g, off, t, pas, hMin, hVar, base){
     base = base || SOL_Y;
@@ -1517,7 +1536,7 @@ class Combat extends Phaser.Scene {
         }
       }
     }
-  }
+  },
   dessinerSortie(){
     const g = this.gSortie; g.clear();
     if (this.def.sortie === 'patron') return;
@@ -1571,7 +1590,7 @@ class Combat extends Phaser.Scene {
       g.beginPath(); g.moveTo(x - 34, sol - 110); g.lineTo(x + 34, sol - 14); g.strokePath();
       g.beginPath(); g.moveTo(x + 34, sol - 110); g.lineTo(x - 34, sol - 14); g.strokePath();
     }
-  }
+  },
 
   dessinerCaisses(){
     const g = this.gCaisses; g.clear();
@@ -1584,7 +1603,7 @@ class Combat extends Phaser.Scene {
       g.beginPath(); g.moveTo(x-11, y-11); g.lineTo(x+11, y+11); g.strokePath();
       g.beginPath(); g.moveTo(x+11, y-11); g.lineTo(x-11, y+11); g.strokePath();
     }
-  }
+  },
   dessinerObjets(){
     const g = this.gObjets; g.clear();
     for (const o of this.objets){
@@ -1603,7 +1622,7 @@ class Combat extends Phaser.Scene {
         g.fillStyle(0xffffff, 0.9);   g.fillCircle(x, y - 8, 2.6);
       }
     }
-  }
+  },
   dessinerMonstres(){
     const g = this.gMonstres; g.clear();
     for (const m of this.monstres){
@@ -1619,7 +1638,7 @@ class Combat extends Phaser.Scene {
         g.fillStyle(m.def.boss ? 0xff5e5e : 0xe2584d, 1); g.fillRect(x-l, y, l*2 * (m.pv/m.pvMax), 4);
       }
     }
-  }
+  },
   dessinerBrute(g, m){
     const gros = !!m.def.gros;
     const e = m.def.taille[0] / 26;   // l'échelle découle de la taille déclarée
@@ -1642,7 +1661,7 @@ class Combat extends Phaser.Scene {
     g.fillStyle(0x1a0f22, 1);
     g.fillCircle(x + vers*4 - 4*e, y-17*e+dandine, 1.4*e);
     g.fillCircle(x + vers*4 + 4*e, y-17*e+dandine, 1.4*e);
-  }
+  },
   dessinerDrone(g, m){
     const x = m.go.x, y = m.go.y;
     const flotte = Math.sin(m.phase) * 2;
@@ -1659,7 +1678,7 @@ class Combat extends Phaser.Scene {
     g.lineStyle(2, eclaire || COUL.droneOmbre, 0.9);
     g.beginPath(); g.moveTo(x-16-bat, y-15+flotte); g.lineTo(x-6+bat, y-15+flotte); g.strokePath();
     g.beginPath(); g.moveTo(x+6-bat, y-15+flotte); g.lineTo(x+16+bat, y-15+flotte); g.strokePath();
-  }
+  },
   dessinerGardien(g, m){
     const e = m.def.taille[0] / 28;
     const x = m.go.x, y = m.go.y + m.def.taille[1]/2;
@@ -1688,7 +1707,7 @@ class Combat extends Phaser.Scene {
     g.lineStyle(4*e, eclaire || 0x1d2340, 1);
     g.beginPath(); g.moveTo(x + vers*10*e, y-24*e+tasse+dandine);
     g.lineTo(x + vers*(18 + (m.prepare > 0 ? -6 : 0))*e, y-14*e+tasse+dandine); g.strokePath();
-  }
+  },
   dessinerTourelle(g, m){
     const e = m.def.taille[0] / 30;
     const x = m.go.x, y = m.go.y + m.def.taille[1]/2;
@@ -1711,7 +1730,7 @@ class Combat extends Phaser.Scene {
       g.lineTo(lx + Math.cos(ang)*260, ly + Math.sin(ang)*260); g.strokePath();
     }
     g.fillStyle(COUL.tourelleOeil, m.vise > 0 ? 1 : 0.55); g.fillCircle(x, y-20*e, 3.5*e);
-  }
+  },
 
   dessinerPerso(b){
     const g = this.perso; g.clear();
@@ -1835,7 +1854,7 @@ class Combat extends Phaser.Scene {
     g.setRotation(this.sens * inclinaison);
     g.setScale(this.sens * (1 + this.squash*0.22), 1 - this.squash*0.22);
     g.setAlpha(this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
-  }
+  },
   membre(g, hx, hy, tx, ty, l1, l2, sens, c1, c2, e1, e2){
     const dx = tx-hx, dy = ty-hy;
     const d = Math.min(Math.hypot(dx, dy), l1+l2-0.001) || 0.001;
@@ -1849,9 +1868,10 @@ class Combat extends Phaser.Scene {
     g.beginPath(); g.moveTo(kx, ky); g.lineTo(tx, ty); g.strokePath();
     g.fillStyle(c1, 1); g.fillCircle(hx, hy, e1/2); g.fillCircle(kx, ky, e1/2);
     g.fillStyle(c2, 1); g.fillCircle(tx, ty, e2/2);
-  }
-}
+  },
+});
 
+// ═══════════════ src/demarrage.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // ÉCRAN-TITRE
 // Le jeu n'est construit qu'au moment où on appuie : rien ne tourne
