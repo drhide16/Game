@@ -19,7 +19,9 @@ const CFG = {
   zoneMorte:     0.24,  // part du rayon du joystick ignorée au centre
   seuilHaut:     0.45,  // au-delà, le joystick vers le haut = uppercut
   seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
-  chanceCoeur:   0.35,  // proportion de monstres vaincus qui lâchent un cœur
+  chanceCoeur:   0.35,
+  viesDepart:    3,     // au-delà, game over et retour à l'écran d'accueil
+  rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme

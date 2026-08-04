@@ -2,6 +2,8 @@
 // ÉCRAN-TITRE
 // Le jeu n'est construit qu'au moment où on appuie : rien ne tourne
 // derrière le titre, et la première image affichée est déjà jouable.
+// Au game over, retourAuTitre() détruit la partie et rend l'écran
+// d'accueil ; le prochain appui repart de zéro.
 // ─────────────────────────────────────────────────────────────
 let partie = null;
 
@@ -29,9 +31,20 @@ function demarrer(){
 
   // iOS ne recalcule pas toujours la taille du parent tout de suite après
   // une rotation : on force un rafraîchissement peu après l'événement.
-  const rafraichir = () => setTimeout(() => partie.scale.refresh(), 120);
+  // La garde sur partie compte : après un retour au titre, l'écouteur
+  // survit à la partie détruite.
+  const rafraichir = () => setTimeout(() => { if (partie) partie.scale.refresh(); }, 120);
   addEventListener('orientationchange', rafraichir);
   addEventListener('resize', rafraichir);
+}
+
+function retourAuTitre(){
+  if (!partie) return;
+  partie.destroy(true);   // true : retire aussi le canvas de la page
+  partie = null;
+  window.jeu = null;
+  document.body.classList.remove('enjeu');
+  afficherRecord();       // la partie perdue vient peut-être de le battre
 }
 
 if (typeof Phaser !== 'undefined'){

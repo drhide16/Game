@@ -243,7 +243,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '9';
+const VERSION = '10';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -293,7 +293,9 @@ const CFG = {
   zoneMorte:     0.24,  // part du rayon du joystick ignorée au centre
   seuilHaut:     0.45,  // au-delà, le joystick vers le haut = uppercut
   seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
-  chanceCoeur:   0.35,  // proportion de monstres vaincus qui lâchent un cœur
+  chanceCoeur:   0.35,
+  viesDepart:    3,     // au-delà, game over et retour à l'écran d'accueil
+  rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
@@ -411,7 +413,7 @@ function generateur(s){
 // puisque changer d'étage relance la scène.
 let PARTIE = null;
 function nouvellePartieEtat(){
-  return { niveau:0, pv:CFG.pvJoueur, arme:null, munitions:0, vaincus:0, morts:0 };
+  return { niveau:0, pv:CFG.pvJoueur, vies:CFG.viesDepart, arme:null, munitions:0, vaincus:0, morts:0 };
 }
 PARTIE = nouvellePartieEtat();
 
@@ -539,8 +541,8 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 // ─────────────────────────────────────────────────────────────
 const ENTREE = {
   axeX:0, saut:false, sautPresse:false, accroupi:false,
-  haut:false, hautPresse:false,
-  coupPresse:null, validePresse:false,
+  haut:false, hautPresse:false, hautT:0,
+  coupPresse:null, coupT:0, validePresse:false,
 };
 
 const socle = document.getElementById('socle');
@@ -567,7 +569,7 @@ function majJoystick(e){
   // l'uppercut exige une poussée franchement verticale, sinon courir en
   // diagonale vers le haut le déclencherait sans arrêt
   const versLeHaut = ny < -CFG.seuilHaut && Math.abs(ny) > Math.abs(nx);
-  if (versLeHaut && !ENTREE.haut){ ENTREE.hautPresse = true; ENTREE.validePresse = true; }
+  if (versLeHaut && !ENTREE.haut){ ENTREE.hautPresse = true; ENTREE.hautT = performance.now(); ENTREE.validePresse = true; }
   ENTREE.haut = versLeHaut;
   // en bas, pas d'exigence de ce genre : bas + côté, c'est ramper
   ENTREE.accroupi = ny > CFG.seuilBas;
@@ -600,7 +602,7 @@ for (const b of document.querySelectorAll('.pad button')){
     e.preventDefault();
     capturer(b, e.pointerId);
     if (a === 'saut'){ ENTREE.saut = true; ENTREE.sautPresse = true; }
-    else ENTREE.coupPresse = a;
+    else { ENTREE.coupPresse = a; ENTREE.coupT = performance.now(); }
     ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
   // relâcher ✕ écourte le saut : c'est ce qui le rend modulable
@@ -640,14 +642,14 @@ addEventListener('keydown', e => {
   if (e.code === 'ArrowRight') { ENTREE.axeX =  1; e.preventDefault(); }
   if (e.code === 'ArrowDown')  { ENTREE.accroupi = true; e.preventDefault(); }
   if (e.code === 'ArrowUp' && !e.repeat){
-    ENTREE.hautPresse = true; ENTREE.validePresse = true; e.preventDefault();
+    ENTREE.hautPresse = true; ENTREE.hautT = performance.now(); ENTREE.validePresse = true; e.preventDefault();
   }
   if (e.code === 'Space' && !e.repeat){
     ENTREE.saut = true; ENTREE.sautPresse = true; ENTREE.validePresse = true; e.preventDefault();
   }
-  if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.validePresse = true; }
-  if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.validePresse = true; }
-  if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.validePresse = true; }
+  if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
+  if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
+  if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
 });
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
@@ -694,6 +696,7 @@ class Combat extends Phaser.Scene {
     this.physics.add.existing(this.joueur);
     this.joueur.body.setCollideWorldBounds(true);
     this.checkpoint = { x:120, y:SOL_Y - 60 };
+    this.piedsAvant = SOL_Y - 40;
 
     this.gCaisses  = this.add.graphics().setDepth(3);
     this.gMonstres = this.add.graphics().setDepth(4);
@@ -839,10 +842,12 @@ class Combat extends Phaser.Scene {
       // moins de trous à l'intérieur, et jamais sur le toit près du bord
       if (this.alea() < (dedans ? 0.35 : 0.55)) x += 70 + this.alea()*40;
     }
-    this.creerSol(x, 800);
     this.sortieX = x + 620;
     // le monde doit englober la sortie, sinon elle est hors d'atteinte
     this.largeur = Math.max(this.largeur, this.sortieX + 300);
+    // et le dernier sol court jusqu'au mur : il s'arrêtait 120 px avant,
+    // dépasser l'ascenseur en courant faisait tomber dans le vide
+    this.creerSol(x, this.largeur - x + 60);
 
     // le boss garde la sortie : elle reste verrouillée tant qu'il tient
     this.boss = this.creerMonstre(this.def.boss, this.sortieX - 190, x + 60, this.sortieX - 40);
@@ -900,8 +905,10 @@ class Combat extends Phaser.Scene {
     if (m.def.faible === 'haut') return !bas;
     return true;
   }
-  frapper(m, degats, recul, bas, sourceX){
-    if (!this.vulnerable(m, bas)){
+  frapper(m, degats, recul, bas, sourceX, ecrase){
+    // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
+    // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
+    if (!ecrase && !this.vulnerable(m, bas)){
       m.blinde = 0.18;
       SON.jouer('blinde');
       this.eclat(m.go.x, m.go.y, 0, 3, COUL.blinde);
@@ -1028,6 +1035,15 @@ class Combat extends Phaser.Scene {
     if (this.etat !== 'jeu') return;
     this.etat = 'monte';
     this.transition = 0;
+    // on entre VRAIMENT dans la cabine : pendant la transition plus rien
+    // ne pilotait le corps, il gardait sa vitesse, glissait au-delà du
+    // bord et tombait. On le pose au centre, on coupe la gravité, et il
+    // s'élève doucement — vite sur l'échelle, à peine dans l'ascenseur.
+    this.attaque = null;
+    this.accroupi = false;
+    this.joueur.body.reset(this.sortieX, this.joueur.y);
+    this.joueur.body.setAllowGravity(false);
+    this.joueur.body.setVelocity(0, this.def.sortie === 'echelle' ? -70 : -22);
     this.sauvegarder();
     this.majRecord();
     SON.jouer('ascenseur');
@@ -1044,13 +1060,22 @@ class Combat extends Phaser.Scene {
       + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
   }
   terminer(titre){
-    this.etat = 'perdu';
     this.morts++;
+    PARTIE.vies--;
     SON.jouer('mort');
     this.sauvegarder();
     const r = this.majRecord();
-    this.hudFin.setText(titre + '\n' + this.vaincus + ' monstres vaincus'
-      + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour repartir d\'ici');
+    if (PARTIE.vies <= 0){
+      // plus de vie : game over, et retour à l'écran d'accueil
+      this.etat = 'gameover';
+      this.hudFin.setText('GAME OVER\n' + this.vaincus + ' monstres vaincus'
+        + '\nrecord ' + r.monstres + '\n\nun bouton pour l\'écran d\'accueil');
+      return;
+    }
+    this.etat = 'perdu';
+    this.hudFin.setText(titre + '\n'
+      + (PARTIE.vies === 1 ? 'dernière vie' : PARTIE.vies + ' vies restantes')
+      + '\n\n↑ ou un bouton pour repartir d\'ici');
   }
   // On ne relance pas la scène : le monde, les monstres déjà vaincus et
   // les caisses ouvertes restent en l'état. On repose seulement le joueur
@@ -1063,6 +1088,7 @@ class Combat extends Phaser.Scene {
     this.attaque = null;
     this.squash = 0;
     this.joueur.body.reset(this.checkpoint.x, this.checkpoint.y);
+    this.piedsAvant = this.checkpoint.y + PIEDS;
     this.cameras.main.centerOn(this.checkpoint.x, this.checkpoint.y);
     for (const m of this.monstres){
       if (!m.def.fixe && Math.abs(m.go.x - this.checkpoint.x) < 160){
@@ -1102,6 +1128,9 @@ class Combat extends Phaser.Scene {
         ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
         ENTREE.hautPresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
+        // le retour au titre détruit la partie : hors de la boucle de jeu,
+        // sinon Phaser se fait couper l'herbe sous le pied en plein update
+        else if (this.etat === 'gameover') setTimeout(retourAuTitre, 0);
         else this.recommencer();
         return;
       }
@@ -1114,11 +1143,22 @@ class Combat extends Phaser.Scene {
     const auSol = b.blocked.down || b.touching.down;
     this.accroupi = ENTREE.accroupi && auSol;
 
-    if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
-    if (ENTREE.coupPresse){
-      if (ENTREE.coupPresse === 'poing' && this.arme) this.utiliserArme();
-      else this.lancerAttaque(ENTREE.coupPresse);
-      ENTREE.coupPresse = null;
+    // Les appuis d'attaque restent en réserve un court instant au lieu
+    // d'être avalés : taper pendant un coup en cours lançait... rien, et
+    // en rampant vers un monstre un appui sur deux disparaissait. Le
+    // coup suivant part dès que le bras est libre, comme pour le saut.
+    // l'expiration doit couvrir le plus long des coups (retourné, 620 ms),
+    // sinon presser au début d'un coup expirait avant la fin de celui-ci
+    if (ENTREE.hautPresse && performance.now() - ENTREE.hautT > 700) ENTREE.hautPresse = false;
+    if (ENTREE.coupPresse && performance.now() - ENTREE.coupT > 700) ENTREE.coupPresse = null;
+    if (!this.attaque){
+      if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
+      else if (ENTREE.coupPresse){
+        const coup = ENTREE.coupPresse;
+        ENTREE.coupPresse = null;
+        if (coup === 'poing' && this.arme) this.utiliserArme();
+        else this.lancerAttaque(coup);
+      }
     }
 
     if (this.attaque){
@@ -1222,6 +1262,8 @@ class Combat extends Phaser.Scene {
       } else this.monterEtage();
     }
 
+    this.piedsAvant = this.joueur.y + PIEDS;
+    this.vyChute = this.joueur.body.velocity.y;
     this.majEclats(dt);
     this.dessinerTout(b);
   }
@@ -1271,8 +1313,28 @@ class Combat extends Phaser.Scene {
         }
       }
 
-      if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds()))
+      // Retomber SUR une bestiole l'écrase au lieu de nous blesser.
+      // Le test est un BALAYAGE du sommet, pas un chevauchement : en
+      // pleine chute le corps avance de 50 px et plus par image, il peut
+      // traverser un monstre entier entre deux vérifications.
+      const hautM = m.go.y - m.def.taille[1]/2;
+      const surLui = Math.abs(this.joueur.x - m.go.x) < 14 + m.def.taille[0]/2;
+      const piedsIci = this.joueur.y + PIEDS;
+      // vyChute : la vitesse d'il y a une image. Si le franchissement et
+      // l'atterrissage tombent dans la même image, le sol a déjà remis la
+      // vitesse à zéro quand on arrive ici — on jugerait « pas en chute »
+      if ((this.joueur.body.velocity.y > 140 || this.vyChute > 140) && surLui
+          && this.piedsAvant <= hautM + 2 && piedsIci >= hautM){
+        const vx0 = this.joueur.body.velocity.x;
+        this.joueur.body.reset(this.joueur.x, hautM - PIEDS);  // reposé sur la bestiole
+        this.joueur.body.setVelocity(vx0, -CFG.rebondEcrase);
+        this.sautsAir = Math.max(this.sautsAir, 1);   // le rebond rend le saut aérien
+        this.squash = -1;
+        this.invuln = Math.max(this.invuln, 0.3);     // le temps de ressortir du rebond
+        this.frapper(m, 1, 130, false, this.joueur.x, true);
+      } else if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds())){
         this.blesser(m.go.x, m.def.degats);
+      }
       if (m.go.y > H + 200){ m.mort = true; m.go.destroy(); }
     }
   }
@@ -1373,9 +1435,9 @@ Object.assign(Combat.prototype, {
       g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
       g.fillTriangle(x-11, y, x+11, y, x, y+12);
     }
-    let t = this.def.nom + '   MONSTRES ' + this.vaincus;
+    let t = this.def.nom + '   VIES ' + Math.max(0, PARTIE.vies)
+          + '   MONSTRES ' + this.vaincus;
     if (this.arme) t += '   ' + ARMES[this.arme].nom + ' ' + this.munitions;
-    if (this.morts > 0) t += '   K.O. ' + this.morts;
     this.hudTexte.setText(t);
 
     // barre du boss, seulement quand il est à portée de vue
@@ -1784,7 +1846,9 @@ Object.assign(Combat.prototype, {
         pieds.push([-11 + Math.cos(p)*5, 0]);
         mains.push([2 + Math.cos(p)*9, EPAULE + 20 - Math.max(0, Math.sin(p))*3]);
       }
-      inclinaison = -0.34;
+      // même correction de signe que la course : en rampant on bascule
+      // vers l'avant, tête vers le sol, pas en arrière
+      inclinaison = 0.30;
     } else if (this.accroupi){
       pieds = [[-10, 0], [9, 0]];
       mains = [[-8, EPAULE + 15], [9, EPAULE + 14]];
@@ -1795,17 +1859,24 @@ Object.assign(Combat.prototype, {
       const foulee = 8 + allure * 8;
       const genou  = 5 + allure * 16;
       const bras   = 5 + allure * 8;
+      // le cycle des pieds recule avec l'allure : le pied se pose à peine
+      // devant les hanches et pousse loin derrière. Centré, il se posait
+      // 16 px devant — jambes en avant du corps, l'air de glisser.
+      const recul = allure * 6;
       pieds = []; mains = [];
       for (const dec of [Math.PI, 0]){
         const p = t + dec;
         const s = Math.sin(p);
         const leve = Math.max(0, s);
-        pieds.push([-Math.cos(p)*foulee, -Math.pow(leve, 0.62) * genou]);
+        pieds.push([-Math.cos(p)*foulee - recul, -Math.pow(leve, 0.62) * genou]);
         // bras en opposition, la main passe devant la poitrine à la montée
         mains.push([Math.cos(p)*bras + allure*2,
                     EPAULE + 12 - Math.max(0, s)*(2 + allure*6) - allure*2]);
       }
-      inclinaison = -0.05 - allure*0.11;
+      // rotation positive = tête vers l'avant (repère écran, y vers le
+      // bas) : le buste se penche DANS la course. L'ancien signe négatif
+      // le couchait en arrière, jambes devant.
+      inclinaison = 0.03 + allure*0.14;
     } else {
       const souffle = Math.sin(this.time.now / 420) * 1.2;
       pieds = [[-6, 0], [6, 0]];
@@ -1876,6 +1947,8 @@ Object.assign(Combat.prototype, {
 // ÉCRAN-TITRE
 // Le jeu n'est construit qu'au moment où on appuie : rien ne tourne
 // derrière le titre, et la première image affichée est déjà jouable.
+// Au game over, retourAuTitre() détruit la partie et rend l'écran
+// d'accueil ; le prochain appui repart de zéro.
 // ─────────────────────────────────────────────────────────────
 let partie = null;
 
@@ -1903,9 +1976,20 @@ function demarrer(){
 
   // iOS ne recalcule pas toujours la taille du parent tout de suite après
   // une rotation : on force un rafraîchissement peu après l'événement.
-  const rafraichir = () => setTimeout(() => partie.scale.refresh(), 120);
+  // La garde sur partie compte : après un retour au titre, l'écouteur
+  // survit à la partie détruite.
+  const rafraichir = () => setTimeout(() => { if (partie) partie.scale.refresh(); }, 120);
   addEventListener('orientationchange', rafraichir);
   addEventListener('resize', rafraichir);
+}
+
+function retourAuTitre(){
+  if (!partie) return;
+  partie.destroy(true);   // true : retire aussi le canvas de la page
+  partie = null;
+  window.jeu = null;
+  document.body.classList.remove('enjeu');
+  afficherRecord();       // la partie perdue vient peut-être de le battre
 }
 
 if (typeof Phaser !== 'undefined'){

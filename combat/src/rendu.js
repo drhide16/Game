@@ -29,9 +29,9 @@ Object.assign(Combat.prototype, {
       g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
       g.fillTriangle(x-11, y, x+11, y, x, y+12);
     }
-    let t = this.def.nom + '   MONSTRES ' + this.vaincus;
+    let t = this.def.nom + '   VIES ' + Math.max(0, PARTIE.vies)
+          + '   MONSTRES ' + this.vaincus;
     if (this.arme) t += '   ' + ARMES[this.arme].nom + ' ' + this.munitions;
-    if (this.morts > 0) t += '   K.O. ' + this.morts;
     this.hudTexte.setText(t);
 
     // barre du boss, seulement quand il est à portée de vue
@@ -440,7 +440,9 @@ Object.assign(Combat.prototype, {
         pieds.push([-11 + Math.cos(p)*5, 0]);
         mains.push([2 + Math.cos(p)*9, EPAULE + 20 - Math.max(0, Math.sin(p))*3]);
       }
-      inclinaison = -0.34;
+      // même correction de signe que la course : en rampant on bascule
+      // vers l'avant, tête vers le sol, pas en arrière
+      inclinaison = 0.30;
     } else if (this.accroupi){
       pieds = [[-10, 0], [9, 0]];
       mains = [[-8, EPAULE + 15], [9, EPAULE + 14]];
@@ -451,17 +453,24 @@ Object.assign(Combat.prototype, {
       const foulee = 8 + allure * 8;
       const genou  = 5 + allure * 16;
       const bras   = 5 + allure * 8;
+      // le cycle des pieds recule avec l'allure : le pied se pose à peine
+      // devant les hanches et pousse loin derrière. Centré, il se posait
+      // 16 px devant — jambes en avant du corps, l'air de glisser.
+      const recul = allure * 6;
       pieds = []; mains = [];
       for (const dec of [Math.PI, 0]){
         const p = t + dec;
         const s = Math.sin(p);
         const leve = Math.max(0, s);
-        pieds.push([-Math.cos(p)*foulee, -Math.pow(leve, 0.62) * genou]);
+        pieds.push([-Math.cos(p)*foulee - recul, -Math.pow(leve, 0.62) * genou]);
         // bras en opposition, la main passe devant la poitrine à la montée
         mains.push([Math.cos(p)*bras + allure*2,
                     EPAULE + 12 - Math.max(0, s)*(2 + allure*6) - allure*2]);
       }
-      inclinaison = -0.05 - allure*0.11;
+      // rotation positive = tête vers l'avant (repère écran, y vers le
+      // bas) : le buste se penche DANS la course. L'ancien signe négatif
+      // le couchait en arrière, jambes devant.
+      inclinaison = 0.03 + allure*0.14;
     } else {
       const souffle = Math.sin(this.time.now / 420) * 1.2;
       pieds = [[-6, 0], [6, 0]];
