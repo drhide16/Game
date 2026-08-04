@@ -23,8 +23,8 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 // ─────────────────────────────────────────────────────────────
 const ENTREE = {
   axeX:0, saut:false, sautPresse:false, accroupi:false,
-  haut:false, hautPresse:false,
-  coupPresse:null, validePresse:false,
+  haut:false, hautPresse:false, hautT:0,
+  coupPresse:null, coupT:0, validePresse:false,
 };
 
 const socle = document.getElementById('socle');
@@ -51,7 +51,7 @@ function majJoystick(e){
   // l'uppercut exige une poussée franchement verticale, sinon courir en
   // diagonale vers le haut le déclencherait sans arrêt
   const versLeHaut = ny < -CFG.seuilHaut && Math.abs(ny) > Math.abs(nx);
-  if (versLeHaut && !ENTREE.haut){ ENTREE.hautPresse = true; ENTREE.validePresse = true; }
+  if (versLeHaut && !ENTREE.haut){ ENTREE.hautPresse = true; ENTREE.hautT = performance.now(); ENTREE.validePresse = true; }
   ENTREE.haut = versLeHaut;
   // en bas, pas d'exigence de ce genre : bas + côté, c'est ramper
   ENTREE.accroupi = ny > CFG.seuilBas;
@@ -84,7 +84,7 @@ for (const b of document.querySelectorAll('.pad button')){
     e.preventDefault();
     capturer(b, e.pointerId);
     if (a === 'saut'){ ENTREE.saut = true; ENTREE.sautPresse = true; }
-    else ENTREE.coupPresse = a;
+    else { ENTREE.coupPresse = a; ENTREE.coupT = performance.now(); }
     ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
   // relâcher ✕ écourte le saut : c'est ce qui le rend modulable
@@ -124,14 +124,14 @@ addEventListener('keydown', e => {
   if (e.code === 'ArrowRight') { ENTREE.axeX =  1; e.preventDefault(); }
   if (e.code === 'ArrowDown')  { ENTREE.accroupi = true; e.preventDefault(); }
   if (e.code === 'ArrowUp' && !e.repeat){
-    ENTREE.hautPresse = true; ENTREE.validePresse = true; e.preventDefault();
+    ENTREE.hautPresse = true; ENTREE.hautT = performance.now(); ENTREE.validePresse = true; e.preventDefault();
   }
   if (e.code === 'Space' && !e.repeat){
     ENTREE.saut = true; ENTREE.sautPresse = true; ENTREE.validePresse = true; e.preventDefault();
   }
-  if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.validePresse = true; }
-  if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.validePresse = true; }
-  if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.validePresse = true; }
+  if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
+  if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
+  if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
 });
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;

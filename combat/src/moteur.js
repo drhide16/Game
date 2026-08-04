@@ -36,6 +36,7 @@ class Combat extends Phaser.Scene {
     this.physics.add.existing(this.joueur);
     this.joueur.body.setCollideWorldBounds(true);
     this.checkpoint = { x:120, y:SOL_Y - 60 };
+    this.piedsAvant = SOL_Y - 40;
 
     this.gCaisses  = this.add.graphics().setDepth(3);
     this.gMonstres = this.add.graphics().setDepth(4);
@@ -181,10 +182,12 @@ class Combat extends Phaser.Scene {
       // moins de trous à l'intérieur, et jamais sur le toit près du bord
       if (this.alea() < (dedans ? 0.35 : 0.55)) x += 70 + this.alea()*40;
     }
-    this.creerSol(x, 800);
     this.sortieX = x + 620;
     // le monde doit englober la sortie, sinon elle est hors d'atteinte
     this.largeur = Math.max(this.largeur, this.sortieX + 300);
+    // et le dernier sol court jusqu'au mur : il s'arrêtait 120 px avant,
+    // dépasser l'ascenseur en courant faisait tomber dans le vide
+    this.creerSol(x, this.largeur - x + 60);
 
     // le boss garde la sortie : elle reste verrouillée tant qu'il tient
     this.boss = this.creerMonstre(this.def.boss, this.sortieX - 190, x + 60, this.sortieX - 40);
@@ -242,8 +245,10 @@ class Combat extends Phaser.Scene {
     if (m.def.faible === 'haut') return !bas;
     return true;
   }
-  frapper(m, degats, recul, bas, sourceX){
-    if (!this.vulnerable(m, bas)){
+  frapper(m, degats, recul, bas, sourceX, ecrase){
+    // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
+    // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
+    if (!ecrase && !this.vulnerable(m, bas)){
       m.blinde = 0.18;
       SON.jouer('blinde');
       this.eclat(m.go.x, m.go.y, 0, 3, COUL.blinde);
@@ -370,6 +375,15 @@ class Combat extends Phaser.Scene {
     if (this.etat !== 'jeu') return;
     this.etat = 'monte';
     this.transition = 0;
+    // on entre VRAIMENT dans la cabine : pendant la transition plus rien
+    // ne pilotait le corps, il gardait sa vitesse, glissait au-delà du
+    // bord et tombait. On le pose au centre, on coupe la gravité, et il
+    // s'élève doucement — vite sur l'échelle, à peine dans l'ascenseur.
+    this.attaque = null;
+    this.accroupi = false;
+    this.joueur.body.reset(this.sortieX, this.joueur.y);
+    this.joueur.body.setAllowGravity(false);
+    this.joueur.body.setVelocity(0, this.def.sortie === 'echelle' ? -70 : -22);
     this.sauvegarder();
     this.majRecord();
     SON.jouer('ascenseur');
@@ -386,13 +400,22 @@ class Combat extends Phaser.Scene {
       + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
   }
   terminer(titre){
-    this.etat = 'perdu';
     this.morts++;
+    PARTIE.vies--;
     SON.jouer('mort');
     this.sauvegarder();
     const r = this.majRecord();
-    this.hudFin.setText(titre + '\n' + this.vaincus + ' monstres vaincus'
-      + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour repartir d\'ici');
+    if (PARTIE.vies <= 0){
+      // plus de vie : game over, et retour à l'écran d'accueil
+      this.etat = 'gameover';
+      this.hudFin.setText('GAME OVER\n' + this.vaincus + ' monstres vaincus'
+        + '\nrecord ' + r.monstres + '\n\nun bouton pour l\'écran d\'accueil');
+      return;
+    }
+    this.etat = 'perdu';
+    this.hudFin.setText(titre + '\n'
+      + (PARTIE.vies === 1 ? 'dernière vie' : PARTIE.vies + ' vies restantes')
+      + '\n\n↑ ou un bouton pour repartir d\'ici');
   }
   // On ne relance pas la scène : le monde, les monstres déjà vaincus et
   // les caisses ouvertes restent en l'état. On repose seulement le joueur
@@ -405,6 +428,7 @@ class Combat extends Phaser.Scene {
     this.attaque = null;
     this.squash = 0;
     this.joueur.body.reset(this.checkpoint.x, this.checkpoint.y);
+    this.piedsAvant = this.checkpoint.y + PIEDS;
     this.cameras.main.centerOn(this.checkpoint.x, this.checkpoint.y);
     for (const m of this.monstres){
       if (!m.def.fixe && Math.abs(m.go.x - this.checkpoint.x) < 160){
@@ -444,6 +468,9 @@ class Combat extends Phaser.Scene {
         ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
         ENTREE.hautPresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
+        // le retour au titre détruit la partie : hors de la boucle de jeu,
+        // sinon Phaser se fait couper l'herbe sous le pied en plein update
+        else if (this.etat === 'gameover') setTimeout(retourAuTitre, 0);
         else this.recommencer();
         return;
       }
@@ -456,11 +483,22 @@ class Combat extends Phaser.Scene {
     const auSol = b.blocked.down || b.touching.down;
     this.accroupi = ENTREE.accroupi && auSol;
 
-    if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
-    if (ENTREE.coupPresse){
-      if (ENTREE.coupPresse === 'poing' && this.arme) this.utiliserArme();
-      else this.lancerAttaque(ENTREE.coupPresse);
-      ENTREE.coupPresse = null;
+    // Les appuis d'attaque restent en réserve un court instant au lieu
+    // d'être avalés : taper pendant un coup en cours lançait... rien, et
+    // en rampant vers un monstre un appui sur deux disparaissait. Le
+    // coup suivant part dès que le bras est libre, comme pour le saut.
+    // l'expiration doit couvrir le plus long des coups (retourné, 620 ms),
+    // sinon presser au début d'un coup expirait avant la fin de celui-ci
+    if (ENTREE.hautPresse && performance.now() - ENTREE.hautT > 700) ENTREE.hautPresse = false;
+    if (ENTREE.coupPresse && performance.now() - ENTREE.coupT > 700) ENTREE.coupPresse = null;
+    if (!this.attaque){
+      if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
+      else if (ENTREE.coupPresse){
+        const coup = ENTREE.coupPresse;
+        ENTREE.coupPresse = null;
+        if (coup === 'poing' && this.arme) this.utiliserArme();
+        else this.lancerAttaque(coup);
+      }
     }
 
     if (this.attaque){
@@ -564,6 +602,8 @@ class Combat extends Phaser.Scene {
       } else this.monterEtage();
     }
 
+    this.piedsAvant = this.joueur.y + PIEDS;
+    this.vyChute = this.joueur.body.velocity.y;
     this.majEclats(dt);
     this.dessinerTout(b);
   }
@@ -613,8 +653,28 @@ class Combat extends Phaser.Scene {
         }
       }
 
-      if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds()))
+      // Retomber SUR une bestiole l'écrase au lieu de nous blesser.
+      // Le test est un BALAYAGE du sommet, pas un chevauchement : en
+      // pleine chute le corps avance de 50 px et plus par image, il peut
+      // traverser un monstre entier entre deux vérifications.
+      const hautM = m.go.y - m.def.taille[1]/2;
+      const surLui = Math.abs(this.joueur.x - m.go.x) < 14 + m.def.taille[0]/2;
+      const piedsIci = this.joueur.y + PIEDS;
+      // vyChute : la vitesse d'il y a une image. Si le franchissement et
+      // l'atterrissage tombent dans la même image, le sol a déjà remis la
+      // vitesse à zéro quand on arrive ici — on jugerait « pas en chute »
+      if ((this.joueur.body.velocity.y > 140 || this.vyChute > 140) && surLui
+          && this.piedsAvant <= hautM + 2 && piedsIci >= hautM){
+        const vx0 = this.joueur.body.velocity.x;
+        this.joueur.body.reset(this.joueur.x, hautM - PIEDS);  // reposé sur la bestiole
+        this.joueur.body.setVelocity(vx0, -CFG.rebondEcrase);
+        this.sautsAir = Math.max(this.sautsAir, 1);   // le rebond rend le saut aérien
+        this.squash = -1;
+        this.invuln = Math.max(this.invuln, 0.3);     // le temps de ressortir du rebond
+        this.frapper(m, 1, 130, false, this.joueur.x, true);
+      } else if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds())){
         this.blesser(m.go.x, m.def.degats);
+      }
       if (m.go.y > H + 200){ m.mort = true; m.go.destroy(); }
     }
   }
