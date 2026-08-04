@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0d1120">
+<!-- GitHub Pages sert le HTML avec un cache agressif ; ces en-têtes ne
+     suffisent pas seules sur mobile, d'où la vérification de version en JS -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <!-- Ajouté à l'écran d'accueil sur iOS, le jeu s'ouvre sans barre Safari -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -88,6 +93,13 @@
   }
   .aide{margin-top:18px;font-size:9px;letter-spacing:.18em;color:#6a76a4}
   .record{margin-top:8px;font-size:10px;letter-spacing:.2em;color:#ffd98a;min-height:13px}
+  /* discret, mais toujours lisible : c'est ce qu'on se dit au téléphone
+     pour vérifier qu'on parle bien de la même version */
+  .version{
+    position:absolute;bottom:calc(8px + env(safe-area-inset-bottom));
+    left:0;right:0;text-align:center;
+    font-size:9px;letter-spacing:.16em;color:#3f4870;
+  }
   .demarrer:active{transform:translateY(3px)}
 
   /* coupe-son : au-dessus de l'écran-titre, donc toujours atteignable */
@@ -155,12 +167,12 @@
   .pad button .nom{font-size:7px;letter-spacing:.03em;margin-top:3px;color:rgba(203,213,240,.65)}
   .pad button:active{background:rgba(77,90,150,.8)}
   .b-triangle{--case:1/2/2/3;color:#4dd6c1}
-  .b-carre   {--case:2/1/3/2;color:#e585c8}
   .b-rond    {--case:2/3/3/4;color:#e2584d}
-  /* ✕ n'est plus le saut : c'est le bouton d'arme, vide tant qu'on n'a rien trouvé */
-  .b-croix   {--case:3/2/4/3;color:#4a5478}
-  .b-croix.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
-  .b-croix.armee .nom{color:rgba(233,182,255,.9)}
+  .b-croix   {--case:3/2/4/3;color:#6f9bff}
+  /* le poing cède sa place à l'arme dès qu'on en ramasse une */
+  .b-carre   {--case:2/1/3/2;color:#e585c8}
+  .b-carre.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
+  .b-carre.armee .nom{color:rgba(233,182,255,.9)}
 
   @media (max-height:430px){
     .socle{width:112px;height:112px}
@@ -187,9 +199,10 @@
   <div class="presente">PRÉSENTE</div>
   <div class="jeu">COMBAT</div>
   <div class="glyphes"><i class="g1">△</i><i class="g2">□</i><i class="g3">○</i><i class="g4">✕</i></div>
-  <div class="aide">↑ SAUTER &nbsp;·&nbsp; ↓ S'ACCROUPIR</div>
+  <div class="aide">↑ UPPERCUT &nbsp;·&nbsp; ↓ RAMPER &nbsp;·&nbsp; ✕ SAUTER</div>
   <div class="record" id="record"></div>
   <button class="demarrer" id="demarrer">APPUIE POUR<br>COMMENCER</button>
+  <div class="version" id="version"></div>
 </div>
 
 <button class="son" id="son" title="Couper le son">♪</button>
@@ -203,7 +216,7 @@
     <button class="b-triangle" data-action="retourne"><span class="signe">△</span><span class="nom">RETOURNÉ</span></button>
     <button class="b-carre"    data-action="poing"><span class="signe">□</span><span class="nom">POING</span></button>
     <button class="b-rond"     data-action="pied"><span class="signe">○</span><span class="nom">PIED</span></button>
-    <button class="b-croix"    data-action="arme"><span class="signe">✕</span><span class="nom">ARME</span></button>
+    <button class="b-croix"    data-action="saut"><span class="signe">✕</span><span class="nom">SAUT</span></button>
   </div>
 </div>
 
@@ -220,6 +233,42 @@ if (typeof Phaser === 'undefined'){
 
 <script>
 // ─────────────────────────────────────────────────────────────
+// VERSION ET CACHE
+// Le numéro est affiché sur l'écran-titre : il suffit de le lire pour
+// savoir ce qu'on a sous les yeux. Au chargement on redemande la page
+// au serveur sans passer par le cache ; si elle annonce une version
+// plus récente, on se recharge sur une URL neuve — un simple reload()
+// pourrait resservir la copie en cache, une URL jamais vue non.
+// ─────────────────────────────────────────────────────────────
+const VERSION = '7';
+
+(function verifierVersion(){
+  if (location.protocol === 'file:' || typeof fetch !== 'function') return;
+  let tentee = null;
+  try { tentee = sessionStorage.getItem('mgc-version-tentee'); } catch (e) {}
+  fetch(location.pathname + '?cb=' + Date.now(), { cache:'no-store' })
+    .then(r => r.ok ? r.text() : null)
+    .then(txt => {
+      if (!txt) return;
+      const m = txt.match(/const VERSION = '([^']+)'/);
+      if (!m) return;
+      if (m[1] === VERSION){
+        try { sessionStorage.removeItem('mgc-version-tentee'); } catch (e) {}
+        return;
+      }
+      if (tentee === m[1]) return;   // déjà tenté pour cette version : on n'insiste pas
+      try { sessionStorage.setItem('mgc-version-tentee', m[1]); } catch (e) {}
+      location.replace(location.pathname + '?v=' + encodeURIComponent(m[1]));
+    })
+    .catch(() => {});   // hors ligne ou origine inaccessible : on joue la version en place
+})();
+
+(function afficherVersion(){
+  const el = document.getElementById('version');
+  if (el) el.textContent = 'v' + VERSION;
+})();
+
+// ─────────────────────────────────────────────────────────────
 // RÉGLAGES
 // ─────────────────────────────────────────────────────────────
 const CFG = {
@@ -228,8 +277,8 @@ const CFG = {
   coupureSaut:   220,
   coyote:        0.10,
   bufferSaut:    0.12,
-  vitesseMarche: 230,
-  vitesseAccroupi: 78,
+  vitesseCourse: 330,   // joystick à fond ; l'axe étant analogique, tout
+  vitesseAccroupi: 78,  // ce qui est en dessous donne une allure plus lente
   accel:         2000,
   frein:         2600,
   controleAir:   0.55,
@@ -252,6 +301,9 @@ const COUPS = {
   // dy remonté à -34 : à -26 le pied passait sous le drone et ne pouvait
   // jamais l'atteindre, alors que debout il est censé être vulnérable
   pied:     { duree:0.44, debut:0.13, fin:0.27, portee: 36, hauteur:34, dy:-34, degats:2, recul:360, elan:120, secousse:0.009, son:'pied' },
+  // uppercut, sur la flèche du haut : il frappe au-dessus de la tête, donc
+  // il atteint les drones et passe très au-dessus des baveux
+  crochet:  { duree:0.30, debut:0.07, fin:0.17, portee: 26, hauteur:38, dy:-54, degats:2, recul:260, elan:  0, secousse:0.007, son:'poing' },
   retourne: { duree:0.62, debut:0.20, fin:0.40, portee: 34, hauteur:40, dy:-34, degats:3, recul:430, elan:  0, secousse:0.013, son:'retourne', bilateral:true },
   // armes
   laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, hauteur:20, dy:-40, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
@@ -410,14 +462,15 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 
 // ─────────────────────────────────────────────────────────────
 // MANETTE TACTILE
-// Le joystick porte les quatre directions : gauche/droite pour marcher,
-// haut pour sauter, bas pour s'accroupir. Le bouton ✕ est donc libre
-// et sert d'arme. Chaque bouton capte son propre pointeur, le
-// multi-touch marche sans code supplémentaire.
+// Joystick : gauche/droite pour avancer, bas pour s'accroupir et ramper,
+// haut pour l'uppercut. Le saut revient sur ✕, et le bouton poing cède
+// sa place à l'arme dès qu'on en ramasse une. Chaque bouton capte son
+// propre pointeur, le multi-touch marche sans code supplémentaire.
 // ─────────────────────────────────────────────────────────────
 const ENTREE = {
   axeX:0, saut:false, sautPresse:false, accroupi:false,
-  coupPresse:null, armePresse:false, validePresse:false,
+  haut:false, hautPresse:false,
+  coupPresse:null, validePresse:false,
 };
 
 const socle = document.getElementById('socle');
@@ -435,23 +488,34 @@ function majJoystick(e){
   pouce.style.transform = `translate(${dx}px, ${dy}px)`;
 
   const nx = dx / limite, ny = dy / limite;
-  ENTREE.axeX = Math.abs(nx) < CFG.zoneMorte ? 0 : Math.max(-1, Math.min(1, nx));
+  // on réétale [zoneMorte, 1] sur [0, 1] : sans ça la vitesse sautait
+  // d'un coup à 24 % dès qu'on quittait le centre, au lieu de partir de zéro
+  const a = Math.abs(nx);
+  ENTREE.axeX = a < CFG.zoneMorte ? 0
+    : Math.sign(nx) * Math.min(1, (a - CFG.zoneMorte) / (1 - CFG.zoneMorte));
 
-  const versLeHaut = ny < -CFG.seuilHaut;
-  if (versLeHaut && !ENTREE.saut){ ENTREE.sautPresse = true; ENTREE.validePresse = true; }
-  ENTREE.saut = versLeHaut;
+  // l'uppercut exige une poussée franchement verticale, sinon courir en
+  // diagonale vers le haut le déclencherait sans arrêt
+  const versLeHaut = ny < -CFG.seuilHaut && Math.abs(ny) > Math.abs(nx);
+  if (versLeHaut && !ENTREE.haut){ ENTREE.hautPresse = true; ENTREE.validePresse = true; }
+  ENTREE.haut = versLeHaut;
+  // en bas, pas d'exigence de ce genre : bas + côté, c'est ramper
   ENTREE.accroupi = ny > CFG.seuilBas;
 }
 function relacherJoystick(){
   pointeurJoystick = null;
-  ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.accroupi = false;
+  ENTREE.axeX = 0; ENTREE.haut = false; ENTREE.accroupi = false;
   pouce.style.transform = 'translate(0,0)';
   socle.classList.remove('actif');
 }
+// la capture de pointeur est un confort, pas une condition : si elle
+// échoue, il ne faut surtout pas que l'appui soit perdu avec elle
+function capturer(el, id){ try { el.setPointerCapture(id); } catch (e) {} }
+
 socle.addEventListener('pointerdown', e => {
   e.preventDefault();
   pointeurJoystick = e.pointerId;
-  socle.setPointerCapture(e.pointerId);
+  capturer(socle, e.pointerId);
   socle.classList.add('actif');
   majJoystick(e);
 });
@@ -463,16 +527,19 @@ for (const b of document.querySelectorAll('.pad button')){
   const a = b.dataset.action;
   b.addEventListener('pointerdown', e => {
     e.preventDefault();
-    b.setPointerCapture(e.pointerId);
-    if (a === 'arme') ENTREE.armePresse = true;
+    capturer(b, e.pointerId);
+    if (a === 'saut'){ ENTREE.saut = true; ENTREE.sautPresse = true; }
     else ENTREE.coupPresse = a;
     ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
+  // relâcher ✕ écourte le saut : c'est ce qui le rend modulable
+  const fin = () => { if (a === 'saut') ENTREE.saut = false; };
+  for (const ev of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(ev, fin);
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-// le bouton ✕ affiche l'arme en cours et ses munitions
-const boutonArme = document.querySelector('.b-croix');
+// le bouton poing affiche l'arme en cours et ses munitions
+const boutonArme = document.querySelector('.b-carre');
 function majBoutonArme(arme, munitions){
   const signe = boutonArme.querySelector('.signe');
   const nom   = boutonArme.querySelector('.nom');
@@ -482,8 +549,8 @@ function majBoutonArme(arme, munitions){
     nom.textContent = ARMES[arme].nom + ' ' + munitions;
   } else {
     boutonArme.classList.remove('armee');
-    signe.textContent = '✕';
-    nom.textContent = 'ARME';
+    signe.textContent = '□';
+    nom.textContent = 'POING';
   }
 }
 
@@ -501,18 +568,20 @@ addEventListener('keydown', e => {
   if (e.code === 'ArrowLeft')  { ENTREE.axeX = -1; e.preventDefault(); }
   if (e.code === 'ArrowRight') { ENTREE.axeX =  1; e.preventDefault(); }
   if (e.code === 'ArrowDown')  { ENTREE.accroupi = true; e.preventDefault(); }
-  if ((e.code === 'ArrowUp' || e.code === 'Space') && !e.repeat){
+  if (e.code === 'ArrowUp' && !e.repeat){
+    ENTREE.hautPresse = true; ENTREE.validePresse = true; e.preventDefault();
+  }
+  if (e.code === 'Space' && !e.repeat){
     ENTREE.saut = true; ENTREE.sautPresse = true; ENTREE.validePresse = true; e.preventDefault();
   }
   if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.validePresse = true; }
   if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.validePresse = true; }
   if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.validePresse = true; }
-  if (e.code === 'KeyR') { ENTREE.armePresse = true; ENTREE.validePresse = true; }
 });
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
   if (e.code === 'ArrowDown') ENTREE.accroupi = false;
-  if (e.code === 'ArrowUp' || e.code === 'Space') ENTREE.saut = false;
+  if (e.code === 'Space') ENTREE.saut = false;
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -869,12 +938,12 @@ class Combat extends Phaser.Scene {
     if (this.etat !== 'jeu'){
       if (ENTREE.validePresse){
         ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
-        ENTREE.armePresse = false;
+        ENTREE.hautPresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
         else this.nouvellePartie();
         return;
       }
-      ENTREE.coupPresse = null; ENTREE.armePresse = false; ENTREE.sautPresse = false;
+      ENTREE.coupPresse = null; ENTREE.hautPresse = false; ENTREE.sautPresse = false;
       this.majEclats(dt); this.dessinerTout(b);
       return;
     }
@@ -883,8 +952,14 @@ class Combat extends Phaser.Scene {
     const auSol = b.blocked.down || b.touching.down;
     this.accroupi = ENTREE.accroupi && auSol;
 
-    if (ENTREE.armePresse){ ENTREE.armePresse = false; this.utiliserArme(); }
-    if (ENTREE.coupPresse){ this.lancerAttaque(ENTREE.coupPresse); ENTREE.coupPresse = null; }
+    // la flèche du haut donne l'uppercut, le seul coup qui monte au-dessus de la tête
+    if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
+    if (ENTREE.coupPresse){
+      // le poing laisse la place à l'arme tant qu'il en reste des munitions
+      if (ENTREE.coupPresse === 'poing' && this.arme) this.utiliserArme();
+      else this.lancerAttaque(ENTREE.coupPresse);
+      ENTREE.coupPresse = null;
+    }
 
     if (this.attaque){
       const c = COUPS[this.attaque.type];
@@ -913,7 +988,7 @@ class Combat extends Phaser.Scene {
 
     // déplacement : le joystick est analogique, la vitesse suit son inclinaison
     const bloque = this.attaque && auSol && !COUPS[this.attaque.type].tir;
-    const vMax = this.accroupi ? CFG.vitesseAccroupi : CFG.vitesseMarche;
+    const vMax = this.accroupi ? CFG.vitesseAccroupi : CFG.vitesseCourse;
     const cible = bloque ? 0 : ENTREE.axeX * vMax;
     if (Math.abs(ENTREE.axeX) > 0.05 && !bloque) this.sens = Math.sign(ENTREE.axeX);
 
@@ -1238,8 +1313,13 @@ class Combat extends Phaser.Scene {
     const t = this.phase;
     const marche = Math.abs(b.velocity.x) > 20;
     let pieds, mains, inclinaison = -0.03;
-    // accroupi, tout le corps descend : c'est ce tassement qu'on voit à l'écran
-    const tasse = this.accroupi ? 9 : 0;
+    // allure : 0 à l'arrêt, 1 joystick à fond. Toute l'animation de course
+    // en découle, il n'y a pas deux poses distinctes marche et course.
+    const allure = Math.min(1, Math.abs(b.velocity.x) / CFG.vitesseCourse);
+    const rampe = this.accroupi && marche;
+    // accroupi le corps descend ; en courant il rebondit à chaque foulée
+    let tasse = this.accroupi ? (rampe ? 13 : 9) : 0;
+    if (!this.accroupi && auSol && marche) tasse -= Math.abs(Math.sin(t)) * allure * 2.5;
 
     if (this.attaque){
       const c = COUPS[this.attaque.type];
@@ -1253,6 +1333,14 @@ class Combat extends Phaser.Scene {
         mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
         pieds = [[-6, 0], [6 + ext*26, -6 - ext*14]];
         inclinaison = 0.04 + ext*0.12;
+      } else if (this.attaque.type === 'crochet'){
+        // uppercut : le bras ne peut pas dépasser le sommet du crâne, sa
+        // longueur l'en empêche. C'est le corps qui se soulève avec le coup
+        // pour que le geste se lise.
+        mains = [[-7 + ext*2, EPAULE + 12], [5 + ext*3, EPAULE - 4 - ext*22]];
+        pieds = [[-8, 0], [7, -ext*3]];
+        inclinaison = 0.02 - ext*0.10;
+        tasse -= ext * 4;
       } else if (c.faisceau || c.tir){
         // bras tendu, arme en avant
         mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
@@ -1268,18 +1356,32 @@ class Combat extends Phaser.Scene {
     } else if (!auSol){
       pieds = b.velocity.y < 0 ? [[-7,-3],[7,-9]] : [[-8,-7],[9,-1]];
       mains = b.velocity.y < 0 ? [[-6,EPAULE+7],[8,EPAULE-9]] : [[-9,EPAULE-5],[8,EPAULE+5]];
+    } else if (rampe){
+      // ramper : le buste bascule à l'horizontale, bras et jambes alternent
+      pieds = []; mains = [];
+      for (const dec of [Math.PI, 0]){
+        const p = t * 2.2 + dec;
+        pieds.push([-11 + Math.cos(p)*5, 0]);
+        mains.push([2 + Math.cos(p)*9, EPAULE + 20 - Math.max(0, Math.sin(p))*3]);
+      }
+      inclinaison = -0.34;
     } else if (this.accroupi){
       pieds = [[-10, 0], [9, 0]];
       mains = [[-8, EPAULE + 15], [9, EPAULE + 14]];
       inclinaison = -0.10;
     } else if (marche){
+      // plus on va vite, plus la foulée s'allonge, le genou monte,
+      // les bras pompent et le buste se penche en avant
+      const foulee = 7 + allure * 7;
+      const genou  = 6 + allure * 13;
+      const bras   = 6 + allure * 7;
       pieds = []; mains = [];
       for (const dec of [Math.PI, 0]){
         const p = t + dec;
-        pieds.push([-Math.cos(p)*9, Math.sin(p) > 0 ? -Math.sin(p)*10 : 0]);
-        mains.push([Math.cos(p)*8, EPAULE + 13 - Math.max(0, Math.sin(p))*4]);
+        pieds.push([-Math.cos(p)*foulee, Math.sin(p) > 0 ? -Math.sin(p)*genou : 0]);
+        mains.push([Math.cos(p)*bras, EPAULE + 13 - Math.max(0, Math.sin(p))*(3 + allure*7)]);
       }
-      inclinaison = -0.06;
+      inclinaison = -0.05 - allure*0.12;
     } else {
       const souffle = Math.sin(this.time.now / 420) * 1.2;
       pieds = [[-6, 0], [6, 0]];
@@ -1359,7 +1461,7 @@ function demarrer(){
   SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
   ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false;
   ENTREE.accroupi = false; ENTREE.coupPresse = null;
-  ENTREE.armePresse = false; ENTREE.validePresse = false;
+  ENTREE.haut = false; ENTREE.hautPresse = false; ENTREE.validePresse = false;
 
   partie = new Phaser.Game({
     type: Phaser.AUTO,
