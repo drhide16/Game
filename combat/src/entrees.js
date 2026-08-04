@@ -95,15 +95,19 @@ for (const b of document.querySelectorAll('.pad button')){
 
 // le bouton poing affiche l'arme en cours et ses munitions
 const boutonArme = document.querySelector('.b-carre');
-function majBoutonArme(arme, munitions){
+function majBoutonArme(arme, munitions, segments){
   const signe = boutonArme.querySelector('.signe');
   const nom   = boutonArme.querySelector('.nom');
-  if (arme){
-    boutonArme.classList.add('armee');
+  boutonArme.classList.toggle('armee', !!arme);
+  boutonArme.classList.toggle('vide', !!arme && munitions <= 0);
+  if (arme && munitions <= 0){
+    // bracelet vide : l'appui éjecte le segment usé et recharge
+    signe.textContent = '↻';
+    nom.textContent = 'RECHARGE';
+  } else if (arme){
     signe.textContent = '✦';
-    nom.textContent = ARMES[arme].nom + ' ' + munitions;
+    nom.textContent = ARMES[arme].nom + ' ' + munitions + (segments > 0 ? '·' + segments : '');
   } else {
-    boutonArme.classList.remove('armee');
     signe.textContent = '□';
     nom.textContent = 'POING';
   }

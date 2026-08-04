@@ -14,7 +14,7 @@ function generateur(s){
 // puisque changer d'étage relance la scène.
 let PARTIE = null;
 function nouvellePartieEtat(){
-  return { niveau:0, pv:CFG.pvJoueur, vies:CFG.viesDepart, arme:null, munitions:0, vaincus:0, morts:0 };
+  return { niveau:0, pv:CFG.pvJoueur, vies:CFG.viesDepart, arme:null, munitions:0, segments:0, vaincus:0, morts:0 };
 }
 PARTIE = nouvellePartieEtat();
 

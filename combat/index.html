@@ -175,6 +175,9 @@
   .b-carre   {--case:2/1/3/2;color:#e585c8}
   .b-carre.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
   .b-carre.armee .nom{color:rgba(233,182,255,.9)}
+  /* bracelet vide : l'appui éjecte le segment usé, le bouton vire à l'orange */
+  .b-carre.armee.vide{color:#ff9d2e;background:rgba(86,50,16,.6);box-shadow:0 0 16px rgba(255,157,46,.5)}
+  .b-carre.armee.vide .nom{color:rgba(255,220,170,.95)}
 
   @media (max-height:430px){
     .socle{width:112px;height:112px}
@@ -243,7 +246,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '10';
+const VERSION = '11';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -295,7 +298,9 @@ const CFG = {
   seuilBas:      0.45,  // au-delà, le joystick vers le bas = accroupi
   chanceCoeur:   0.35,
   viesDepart:    3,     // au-delà, game over et retour à l'écran d'accueil
-  rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant  // proportion de monstres vaincus qui lâchent un cœur
+  rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
+  segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
+  segmentsMax:   5,     // réserve maximale de segments de rechange  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
@@ -311,12 +316,14 @@ const COUPS = {
   laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, hauteur:20, dy:-40, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
   pistolet: { duree:0.20, debut:0.05, fin:0.06, portee:  0, hauteur: 0, dy:-40, degats:2, recul:180, elan:0, secousse:0.005, son:'pistolet', tir:{ nb:1, vitesse:820, dispersion:0 } },
   fusil:    { duree:0.52, debut:0.07, fin:0.08, portee:  0, hauteur: 0, dy:-38, degats:2, recul:320, elan:0, secousse:0.014, son:'fusil',    tir:{ nb:3, vitesse:700, dispersion:0.13 } },
+  // l'éjection du segment usé : le rechargement est lui-même une attaque
+  jet:      { duree:0.30, debut:0, fin:0, portee:  0, hauteur: 0, dy:-40, degats:2, recul:260, elan:0, secousse:0.004, son:'ejecte', jet:true },
 };
 
 const ARMES = {
-  laser:    { nom:'LASER',    munitions:14, couleur:0xc46bff, clair:0xe9b6ff },
-  pistolet: { nom:'PISTOLET', munitions:24, couleur:0xffd166, clair:0xfff0c2 },
-  fusil:    { nom:'FUSIL',    munitions:10, couleur:0xff7b54, clair:0xffc2ac },
+  laser:    { nom:'LASER',    munitions:8,  couleur:0xc46bff, clair:0xe9b6ff },
+  pistolet: { nom:'PISTOLET', munitions:14, couleur:0xffd166, clair:0xfff0c2 },
+  fusil:    { nom:'FUSIL',    munitions:6,  couleur:0xff7b54, clair:0xffc2ac },
 };
 
 // Chaque bestiole n'est vulnérable qu'à une hauteur : c'est ce qui donne
@@ -413,7 +420,7 @@ function generateur(s){
 // puisque changer d'étage relance la scène.
 let PARTIE = null;
 function nouvellePartieEtat(){
-  return { niveau:0, pv:CFG.pvJoueur, vies:CFG.viesDepart, arme:null, munitions:0, vaincus:0, morts:0 };
+  return { niveau:0, pv:CFG.pvJoueur, vies:CFG.viesDepart, arme:null, munitions:0, segments:0, vaincus:0, morts:0 };
 }
 PARTIE = nouvellePartieEtat();
 
@@ -505,6 +512,8 @@ const SON = {
       case 'mort':     [440,330,262,196].forEach((f,i) => this.note('triangle', f, f, 0.26, 0.22, i*0.16)); break;
       case 'gagne':    [523,659,784,1047].forEach((f,i) => this.note('square', f, f, 0.2, 0.2, i*0.11)); break;
       case 'vide':     this.note('square', 160, 120, 0.06, 0.12); break;
+      case 'ejecte':   this.note('square', 1100, 700, 0.07, 0.18); this.souffle(0.14, 0.32, 900, 1.2); break;
+      case 'recharge': this.note('square', 500, 500, 0.05, 0.16); this.note('square', 950, 950, 0.06, 0.2, 0.08); break;
       case 'visee':    this.note('square', 900, 1500, 0.5, 0.09); break;
       case 'tirEnnemi':this.note('sawtooth', 500, 200, 0.14, 0.18); break;
       case 'charge':   this.note('sawtooth', 120, 300, 0.4, 0.14); break;
@@ -613,15 +622,19 @@ for (const b of document.querySelectorAll('.pad button')){
 
 // le bouton poing affiche l'arme en cours et ses munitions
 const boutonArme = document.querySelector('.b-carre');
-function majBoutonArme(arme, munitions){
+function majBoutonArme(arme, munitions, segments){
   const signe = boutonArme.querySelector('.signe');
   const nom   = boutonArme.querySelector('.nom');
-  if (arme){
-    boutonArme.classList.add('armee');
+  boutonArme.classList.toggle('armee', !!arme);
+  boutonArme.classList.toggle('vide', !!arme && munitions <= 0);
+  if (arme && munitions <= 0){
+    // bracelet vide : l'appui éjecte le segment usé et recharge
+    signe.textContent = '↻';
+    nom.textContent = 'RECHARGE';
+  } else if (arme){
     signe.textContent = '✦';
-    nom.textContent = ARMES[arme].nom + ' ' + munitions;
+    nom.textContent = ARMES[arme].nom + ' ' + munitions + (segments > 0 ? '·' + segments : '');
   } else {
-    boutonArme.classList.remove('armee');
     signe.textContent = '□';
     nom.textContent = 'POING';
   }
@@ -677,13 +690,14 @@ class Combat extends Phaser.Scene {
     this.pv = PARTIE.pv; this.invuln = CFG.invulnRenais;
     this.vaincus = PARTIE.vaincus; this.morts = PARTIE.morts;
     this.arme = PARTIE.arme; this.munitions = PARTIE.munitions;
+    this.segments = PARTIE.segments | 0;
     this.etat = 'jeu'; this.accroupi = false;
     this.astuceBas = false; this.astuceHaut = false;
     this.eclats = []; this.objets = []; this.caisses = [];
     this.tirs = []; this.tirsEnnemis = [];
     this.msg = null; this.transition = 0;
     this.sAvant = 0;
-    majBoutonArme(this.arme, this.munitions);
+    majBoutonArme(this.arme, this.munitions, this.segments);
 
     this.fond = this.add.graphics().setScrollFactor(0).setDepth(-10);
     this.gSortie = this.add.graphics().setDepth(-2);
@@ -862,19 +876,43 @@ class Combat extends Phaser.Scene {
     SON.jouer(c.son);
     if (c.secousse) this.cameras.main.shake(90, c.secousse);
     if (c.tir) this.tirer(c);
+    if (c.jet) this.ejecterSegment(c);
     if (c.elan && this.joueur.body.blocked.down && !this.accroupi)
       this.joueur.body.setVelocityX(this.sens * c.elan);
   }
   utiliserArme(){
     if (!this.arme){ SON.jouer('vide'); return; }
     if (this.attaque) return;
+    if (this.munitions <= 0){
+      // bracelet vide : l'appui éjecte le segment usé — le jet est une
+      // arme — et un segment neuf s'enclenche s'il en reste
+      this.lancerAttaque('jet');
+      return;
+    }
     this.munitions--;
     this.lancerAttaque(this.arme);
-    if (this.munitions <= 0){
+    majBoutonArme(this.arme, this.munitions, this.segments);
+  }
+  ejecterSegment(c){
+    const a = ARMES[this.arme];
+    const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
+    // le segment usé part en cloche et tournoie : gravité propre, il se
+    // brise au sol
+    this.tirs.push({ x:this.joueur.x + this.sens*14, y,
+      vx:this.sens*430, vy:-190, g:1400,
+      degats:c.degats, recul:c.recul, bas:this.attaque.bas,
+      couleur:a.couleur, clair:a.clair, jet:true, vie:1.6 });
+    if (this.segments > 0){
+      this.segments--;
+      this.munitions = a.munitions;
+      SON.jouer('recharge');
+      this.message('SEGMENT NEUF  —  ' + a.nom + ' ×' + this.munitions);
+    } else {
+      // c'était la dernière pièce du bracelet, elle vient d'être jetée
       this.arme = null; this.munitions = 0;
-      this.message('ARME VIDE');
+      this.message('BRACELET ÉPUISÉ');
     }
-    majBoutonArme(this.arme, this.munitions);
+    majBoutonArme(this.arme, this.munitions, this.segments);
   }
   tirer(c){
     const y = this.joueur.y + PIEDS + c.dy + (this.accroupi ? DECALAGE_ACCROUPI : 0);
@@ -1009,11 +1047,17 @@ class Combat extends Phaser.Scene {
       this.message('+1 ♥');
     } else {
       const a = ARMES[o.type];
-      this.munitions = (this.arme === o.type ? this.munitions : 0) + a.munitions;
-      this.arme = o.type;
-      majBoutonArme(this.arme, this.munitions);
+      if (this.arme === o.type){
+        this.segments = Math.min(CFG.segmentsMax, this.segments + CFG.segmentsParBracelet);
+        this.message(a.nom + '  —  +' + CFG.segmentsParBracelet + ' SEGMENTS');
+      } else {
+        this.arme = o.type;
+        this.munitions = a.munitions;
+        this.segments = CFG.segmentsParBracelet - 1;
+        this.message(a.nom + '  —  □ POUR TIRER  ×' + this.munitions);
+      }
+      majBoutonArme(this.arme, this.munitions, this.segments);
       SON.jouer('arme');
-      this.message(a.nom + '  —  □ POUR TIRER  ×' + this.munitions);
     }
     o.pris = true;
     o.go.destroy();
@@ -1023,6 +1067,7 @@ class Combat extends Phaser.Scene {
   // ── étages, mort, victoire ──────────────────────────────────
   sauvegarder(){
     PARTIE.pv = this.pv; PARTIE.arme = this.arme; PARTIE.munitions = this.munitions;
+    PARTIE.segments = this.segments;
     PARTIE.vaincus = this.vaincus; PARTIE.morts = this.morts;
   }
   majRecord(){
@@ -1361,6 +1406,11 @@ class Combat extends Phaser.Scene {
   majTirs(dt){
     for (const t of this.tirs){
       t.vie -= dt;
+      if (t.g){
+        t.vy += t.g * dt;
+        // le segment jeté se brise en touchant le sol
+        if (t.y > SOL_Y - 3){ this.eclat(t.x, SOL_Y - 4, Math.sign(t.vx), 6, t.couleur); t.fini = true; continue; }
+      }
       t.x += t.vx * dt;
       t.y += t.vy * dt;
       if (t.vie <= 0){ t.fini = true; continue; }
@@ -1437,7 +1487,8 @@ Object.assign(Combat.prototype, {
     }
     let t = this.def.nom + '   VIES ' + Math.max(0, PARTIE.vies)
           + '   MONSTRES ' + this.vaincus;
-    if (this.arme) t += '   ' + ARMES[this.arme].nom + ' ' + this.munitions;
+    if (this.arme) t += '   ' + ARMES[this.arme].nom + ' '
+      + (this.munitions > 0 ? this.munitions + (this.segments > 0 ? '·' + this.segments : '') : 'RECHARGE');
     this.hudTexte.setText(t);
 
     // barre du boss, seulement quand il est à portée de vue
@@ -1474,6 +1525,17 @@ Object.assign(Combat.prototype, {
       g.fillStyle(0xffffff, k); g.fillCircle(x0, y, 7*k);
     }
     for (const t of this.tirs){
+      if (t.jet){
+        // le segment usé tournoie : un trait épais qui tourne suffit à
+        // donner la rotation à cette taille
+        const a = (1.6 - t.vie) * 14 * Math.sign(t.vx);
+        const cx = Math.cos(a)*6, cy = Math.sin(a)*6;
+        g.fillStyle(t.couleur, 0.22); g.fillCircle(t.x, t.y, 9);
+        g.lineStyle(5, t.couleur, 1);
+        g.beginPath(); g.moveTo(t.x - cx, t.y - cy); g.lineTo(t.x + cx, t.y + cy); g.strokePath();
+        g.fillStyle(t.clair || 0xffffff, 0.95); g.fillCircle(t.x, t.y, 2.2);
+        continue;
+      }
       g.fillStyle(t.couleur, 0.25); g.fillCircle(t.x, t.y, 7);
       g.fillStyle(t.couleur, 1);    g.fillRect(t.x - 5, t.y - 2, 10, 4);
       g.fillStyle(0xffffff, 0.9);   g.fillRect(t.x - 2, t.y - 1, 4, 2);
@@ -1826,7 +1888,7 @@ Object.assign(Combat.prototype, {
         pieds = [[-8, 0], [7, -ext*3]];
         inclinaison = 0.02 - ext*0.10;
         tasse -= ext * 4;
-      } else if (c.faisceau || c.tir){
+      } else if (c.faisceau || c.tir || c.jet){
         mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
         pieds = [[-9, 0], [8, 0]];
         inclinaison = -0.04 - ext*0.03;
