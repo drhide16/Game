@@ -9,6 +9,7 @@ Object.assign(Aquad.prototype, {
   dessinerTout(){
     this.dessinerSol();
     this.dessinerSortie();
+    this.dessinerVisee();
     for (const d of this.decors) this.animerDecor(d);
     this.dessinerCaisses();
     this.dessinerPierres();
@@ -76,6 +77,32 @@ Object.assign(Aquad.prototype, {
       g.lineStyle(5, 0xe2584d, 0.8);
       g.beginPath(); g.moveTo(x0 + 8, y - 40); g.lineTo(x0 + 196, y + 40); g.strokePath();
       g.beginPath(); g.moveTo(x0 + 196, y - 40); g.lineTo(x0 + 8, y + 40); g.strokePath();
+    }
+  },
+
+  // ── la visée : ce que dirait un coup donné maintenant ───────
+  dessinerVisee(){
+    const g = this.gVisee; g.clear();
+    if (this.etat !== 'jeu') return;
+    const j = this.joueurs[0];
+    // l'arc au sol devant le héros : là où porterait le coup. Masqué
+    // pendant une frappe — le cercle blanc de l'impact prend le relais.
+    if (!j.attaque && !j.porte){
+      const ang = Math.atan2(j.fy, j.fx);
+      g.lineStyle(3, 0xffffff, 0.22);
+      g.beginPath();
+      g.arc(j.go.x, j.go.y + 2, 42, ang - 0.6, ang + 0.6);
+      g.strokePath();
+    }
+    // l'anneau pulsant sous l'ennemi qui serait touché
+    const c = this.cibleVisee;
+    if (c && !c.mort){
+      const bs = this.boiteSol(c.go, 1);
+      const pulse = 0.32 + 0.16 * Math.sin(this.time.now / 160);
+      g.lineStyle(3.5, 0xffd166, pulse + 0.2);
+      g.strokeEllipse(c.go.x, c.go.y + bs.height/2, bs.width + 14, (bs.width + 14) * 0.42);
+      g.fillStyle(0xffd166, pulse * 0.4);
+      g.fillEllipse(c.go.x, c.go.y + bs.height/2, bs.width + 14, (bs.width + 14) * 0.42);
     }
   },
 
@@ -164,7 +191,8 @@ Object.assign(Aquad.prototype, {
     const eclaire = m.flash > 0 ? 0xffffff : (alerte ? 0xffe9b0 : null);
     const corps = eclaire || m.def.couleur;
     const ombre = eclaire || m.def.ombre;
-    g.fillStyle(0x000000, 0.2); g.fillEllipse(x, y + 10*e, 34*e, 10*e);
+    // l'ombre = la boîte au sol du monstre
+    g.fillStyle(0x000000, 0.2); g.fillEllipse(x, y + 10*e, m.def.taille[0], 10*e);
     // pattes qui trottinent
     g.lineStyle(3*e, ombre, 1);
     for (const s of [-1, 1])
@@ -275,7 +303,9 @@ Object.assign(Aquad.prototype, {
       mains = [[-7, EPAULE + 11 + souffle], [8, EPAULE + 9 + souffle]];
     }
 
-    g.fillStyle(0x000000, 0.22); g.fillEllipse(0, 3, 30, 9);
+    // l'ombre fait exactement la largeur de la boîte au sol : c'est elle
+    // qu'on regarde pour juger un contact
+    g.fillStyle(0x000000, 0.22); g.fillEllipse(0, 3, 26, 8);
 
     this.membre(g, -1, EPAULE, mains[0][0], mains[0][1], 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
     this.membre(g, -1, HANCHE, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);

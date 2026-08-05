@@ -14,6 +14,12 @@ const CFG = {
   pvJoueur:      5,
   invincibilite: 0.9,
   invulnRenais:  1.8,
+  // lisibilité du contact : le jeu se joue sur les OMBRES, pas les corps
+  hurtbox:       0.7,   // part de la boîte du héros qui encaisse (les frôlements pardonnent)
+  contactMonstre:0.85,  // part de la boîte du monstre qui blesse au contact
+  aimantCone:    0.7,   // un coup pivote vers l'ennemi à ± ce cône (radians) du regard
+  aimantPortee:  90,    // rayon d'aimantation des coups au corps
+  aimantPorteeTir: 320, // pour les tirs et objets lancés (cône moitié plus étroit)
   zoneMorte:     0.24,  // part du rayon du joystick ignorée au centre
   chanceCoeur:   0.35,
   porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât
