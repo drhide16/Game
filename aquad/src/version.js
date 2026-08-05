@@ -6,7 +6,7 @@
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '1';
+const VERSION = '2';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;

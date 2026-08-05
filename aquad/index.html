@@ -176,16 +176,18 @@
   /* 7px : « RETOURNÉ » est le plus long des quatre et doit tenir dans le rond */
   .pad button .nom{font-size:7px;letter-spacing:.03em;margin-top:3px;color:rgba(203,213,240,.65)}
   .pad button:active{background:rgba(77,90,150,.8)}
+  /* △ est le bouton arme : il s'allume dès qu'on ramasse un bracelet */
   .b-triangle{--case:1/2/2/3;color:#4dd6c1}
-  .b-rond    {--case:2/3/3/4;color:#e2584d}
-  .b-croix   {--case:3/2/4/3;color:#6f9bff}
-  /* le poing cède sa place à l'arme dès qu'on en ramasse une */
-  .b-carre   {--case:2/1/3/2;color:#e585c8}
-  .b-carre.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
-  .b-carre.armee .nom{color:rgba(233,182,255,.9)}
+  .b-triangle.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
+  .b-triangle.armee .nom{color:rgba(233,182,255,.9)}
   /* bracelet vide : l'appui éjecte le segment usé, le bouton vire à l'orange */
-  .b-carre.armee.vide{color:#ff9d2e;background:rgba(86,50,16,.6);box-shadow:0 0 16px rgba(255,157,46,.5)}
-  .b-carre.armee.vide .nom{color:rgba(255,220,170,.95)}
+  .b-triangle.armee.vide{color:#ff9d2e;background:rgba(86,50,16,.6);box-shadow:0 0 16px rgba(255,157,46,.5)}
+  .b-triangle.armee.vide .nom{color:rgba(255,220,170,.95)}
+  .b-rond    {--case:2/3/3/4;color:#e2584d}
+  /* ✕ passe en LANCER quand on porte quelque chose */
+  .b-croix   {--case:3/2/4/3;color:#6f9bff}
+  .b-croix.porte{color:#ffd166;background:rgba(86,70,16,.55);box-shadow:0 0 16px rgba(255,209,102,.45)}
+  .b-carre   {--case:2/1/3/2;color:#e585c8}
 
   @media (max-height:430px){
     .socle{width:112px;height:112px}
@@ -214,7 +216,7 @@
   <div class="presente">PRÉSENTE</div>
   <div class="jeu">AQUAD</div>
   <div class="glyphes"><i class="g1">△</i><i class="g2">□</i><i class="g3">○</i><i class="g4">✕</i></div>
-  <div class="aide">VUE DE DESSUS &nbsp;·&nbsp; ✕ ROULADE</div>
+  <div class="aide">✕ SOULÈVE PIERRES ET CAISSES · PUIS LANCE</div>
   <div class="aide">TIENS UN COUP APPUYÉ → ÉLASTIQUE</div>
   <div class="choix-diff" id="choixDiff">
     <button data-d="facile">FACILE</button><button data-d="moyen">MOYEN</button><button data-d="difficile">DIFFICILE</button>
@@ -232,10 +234,10 @@
     <div class="pouce" id="pouce"></div>
   </div>
   <div class="pad">
-    <button class="b-triangle" data-action="retourne"><span class="signe">△</span><span class="nom">RETOURNÉ</span></button>
+    <button class="b-triangle" data-action="arme"><span class="signe">△</span><span class="nom">ARME</span></button>
     <button class="b-carre"    data-action="poing"><span class="signe">□</span><span class="nom">POING</span></button>
     <button class="b-rond"     data-action="pied"><span class="signe">○</span><span class="nom">PIED</span></button>
-    <button class="b-croix"    data-action="roulade"><span class="signe">✕</span><span class="nom">ROULADE</span></button>
+    <button class="b-croix"    data-action="action"><span class="signe">✕</span><span class="nom">SOULEVER</span></button>
   </div>
 </div>
 
@@ -260,7 +262,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '1';
+const VERSION = '2';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -291,15 +293,17 @@ const VERSION = '1';
 // ═══════════════ src/reglages.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // RÉGLAGES
-// AquaD se joue vu de dessus : pas de gravité, pas de saut — la
-// mobilité, c'est la ROULADE. Tout l'équilibrage est ici.
+// AquaD se joue vu de dessus : pas de gravité, pas de saut — et ✕
+// soulève les pierres et les caisses pour les lancer sur la faune.
+// Tout l'équilibrage est ici.
 // ─────────────────────────────────────────────────────────────
 const CFG = {
   vitesse:       250,   // joystick à fond ; l'axe est analogique
   accel:         2100,
   frein:         2600,
-  rouladeVitesse: 560,  // l'élan de la roulade
-  rouladeDuree:  0.27,  // pendant laquelle on est intouchable
+  porteVitesse:  0.75,  // on marche moins vite avec une caisse sur la tête
+  lancerVitesse: 520,   // l'objet lancé file à cette vitesse
+  lancerDegats:  2,
   pvJoueur:      5,
   invincibilite: 0.9,
   invulnRenais:  1.8,
@@ -308,7 +312,7 @@ const CFG = {
   porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât
   seuilElastique: 0.25, // tenir un coup au moins ce temps le rend élastique
   chargeMax:     0.8,   // au-delà, le coup part tout seul
-  enduranceMax:  3,     // coups élastiques et roulades puisent dedans
+  enduranceMax:  3,     // les coups élastiques puisent dedans
   enduranceRegen: 0.9,  // vide → pleine en ~3 s
   segmentsParBracelet: 3,
   segmentsMax:   5,
@@ -316,11 +320,9 @@ const CFG = {
 
 // Les zones de coup se placent DEVANT le personnage, dans la direction
 // regardée. portee = distance ; la zone est un carré de ce côté-là.
-// Le retourné devient une attaque tournoyante : il touche tout autour.
 const COUPS = {
   poing:    { duree:0.26, debut:0.05, fin:0.14, portee: 30, degats:1, recul:220, elan:  0, secousse:0.004, son:'poing' },
   pied:     { duree:0.44, debut:0.13, fin:0.27, portee: 40, degats:2, recul:370, elan:150, secousse:0.009, son:'pied' },
-  retourne: { duree:0.62, debut:0.18, fin:0.42, portee: 46, degats:3, recul:430, elan:  0, secousse:0.013, son:'retourne', tourbillon:true },
   laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
   pistolet: { duree:0.20, debut:0.05, fin:0.06, portee:  0, degats:2, recul:180, elan:0, secousse:0.005, son:'pistolet', tir:{ nb:1, vitesse:820, dispersion:0 } },
   fusil:    { duree:0.52, debut:0.07, fin:0.08, portee:  0, degats:2, recul:320, elan:0, secousse:0.014, son:'fusil',    tir:{ nb:3, vitesse:700, dispersion:0.13 } },
@@ -371,7 +373,8 @@ const CRIS = {
   vaincu:   ['SPLAF !', 'PAF !', 'BLOUP !'],
   boss:     ['K.O. !'],
   aie:      ['AÏE !', 'OUCH !', 'OUILLE !', 'OH !'],
-  roulade:  ['WOU !'],
+  souleve:  ['HOP !'],
+  lancer:   ['HAN !'],
   caisse:   ['CRAC !'],
 };
 
@@ -414,11 +417,11 @@ function generateur(s){
 const NIVEAUX = [
   { nom:"L'ÎLE", sous:'un matin dans le lagon', largeur:2000, hauteur:1100,
     peuple:['crabe','crabe','meduse','bernard'], boss:'roiCrabe',
-    caisses:5, monstres:9,
+    caisses:5, pierres:6, monstres:9,
     teinte:{ herbe:0x7fb35e, herbeSombre:0x639446, sable:0xe8d49a } },
   { nom:'LE LAGON', sous:'les eaux troubles', largeur:2300, hauteur:1200,
     peuple:['meduse','meduse','crabe','bernard'], boss:'reineMeduse',
-    caisses:6, monstres:11,
+    caisses:6, pierres:7, monstres:11,
     teinte:{ herbe:0x5e9c8a, herbeSombre:0x477a6b, sable:0xd8cba0 } },
 ];
 
@@ -556,13 +559,14 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 
 // ─────────────────────────────────────────────────────────────
 // MANETTE TACTILE
-// Vue de dessus : le joystick pilote les DEUX axes. ✕ est la roulade.
-// Un coup se CHARGE tant que son bouton est tenu, et part au relâché :
-// bref = coup normal, tenu = coup élastique (s'il reste de l'endurance).
+// Vue de dessus : le joystick pilote les DEUX axes. ✕ soulève une
+// pierre ou une caisse, puis la lance. △ tire l'arme en cours.
+// Un coup (□ ○) se CHARGE tant que son bouton est tenu, et part au
+// relâché : bref = normal, tenu = élastique (s'il reste de l'endurance).
 // ─────────────────────────────────────────────────────────────
 const ENTREE = {
   axeX:0, axeY:0,
-  roulPresse:false,
+  actionPresse:false, armePresse:false,
   chargeAction:null, chargeDebut:0, relache:null,
   validePresse:false,
 };
@@ -617,12 +621,13 @@ for (const b of document.querySelectorAll('.pad button')){
   b.addEventListener('pointerdown', e => {
     e.preventDefault();
     capturer(b, e.pointerId);
-    if (a === 'roulade') ENTREE.roulPresse = true;
+    if (a === 'action') ENTREE.actionPresse = true;
+    else if (a === 'arme') ENTREE.armePresse = true;   // l'arme part à l'appui, pas de charge
     else { ENTREE.chargeAction = a; ENTREE.chargeDebut = performance.now(); }
     ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
   const fin = () => {
-    if (a === 'roulade') return;
+    if (a === 'action' || a === 'arme') return;
     if (ENTREE.chargeAction === a){
       ENTREE.relache = { action:a, duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
       ENTREE.chargeAction = null;
@@ -632,8 +637,8 @@ for (const b of document.querySelectorAll('.pad button')){
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-// le bouton poing affiche l'arme en cours et ses munitions
-const boutonArme = document.querySelector('.b-carre');
+// le bouton △ affiche l'arme en cours et ses munitions
+const boutonArme = document.querySelector('.b-triangle');
 function majBoutonArme(arme, munitions, segments){
   const signe = boutonArme.querySelector('.signe');
   const nom   = boutonArme.querySelector('.nom');
@@ -646,9 +651,16 @@ function majBoutonArme(arme, munitions, segments){
     signe.textContent = '✦';
     nom.textContent = ARMES[arme].nom + ' ' + munitions + (segments > 0 ? '·' + segments : '');
   } else {
-    signe.textContent = '□';
-    nom.textContent = 'POING';
+    signe.textContent = '△';
+    nom.textContent = 'ARME';
   }
+}
+
+// le bouton ✕ dit ce qu'il fera : soulever, ou lancer ce qu'on porte
+const boutonAction = document.querySelector('.b-croix');
+function majBoutonAction(porte){
+  boutonAction.querySelector('.nom').textContent = porte ? 'LANCER' : 'SOULEVER';
+  boutonAction.classList.toggle('porte', !!porte);
 }
 
 const boutonSon = document.getElementById('son');
@@ -667,9 +679,12 @@ addEventListener('keydown', e => {
   if (e.code === 'ArrowUp')    { ENTREE.axeY = -1; e.preventDefault(); }
   if (e.code === 'ArrowDown')  { ENTREE.axeY =  1; e.preventDefault(); }
   if (e.code === 'Space' && !e.repeat){
-    ENTREE.roulPresse = true; ENTREE.validePresse = true; e.preventDefault();
+    ENTREE.actionPresse = true; ENTREE.validePresse = true; e.preventDefault();
   }
-  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  if (e.code === 'KeyE' && !e.repeat){
+    ENTREE.armePresse = true; ENTREE.validePresse = true;
+  }
+  const touches = { KeyA:'poing', KeyZ:'pied' };
   if (touches[e.code] && !e.repeat){
     ENTREE.chargeAction = touches[e.code]; ENTREE.chargeDebut = performance.now();
     ENTREE.validePresse = true;
@@ -678,7 +693,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
   if ((e.code === 'ArrowUp' && ENTREE.axeY < 0) || (e.code === 'ArrowDown' && ENTREE.axeY > 0)) ENTREE.axeY = 0;
-  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  const touches = { KeyA:'poing', KeyZ:'pied' };
   if (touches[e.code] && ENTREE.chargeAction === touches[e.code]){
     ENTREE.relache = { action:touches[e.code], duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
     ENTREE.chargeAction = null;
@@ -713,7 +728,7 @@ class Aquad extends Phaser.Scene {
     this.tirs = []; this.tirsEnnemis = [];
     this.bulles = []; this.bulleSuiv = 0;
     this.msg = null; this.transition = 0;
-    this.monstres = []; this.decors = [];
+    this.monstres = []; this.decors = []; this.pierres = [];
 
     // le joueur ne sort pas de la terre : les limites physiques SONT l'île
     this.physics.world.setBounds(this.ileX, this.ileY, this.ileL, this.ileH);
@@ -732,7 +747,7 @@ class Aquad extends Phaser.Scene {
       arme: PARTIE.arme, munitions: PARTIE.munitions, segments: PARTIE.segments | 0,
       endurance: CFG.enduranceMax,
       attaque: null, charge: null, chargeAIgnorer: null,
-      roulade: null,
+      porte: null,                  // la pierre ou la caisse au-dessus de la tête
       g: this.add.graphics(),       // son calque de dessin, trié par y
     };
     this.physics.add.existing(j.go);
@@ -741,6 +756,7 @@ class Aquad extends Phaser.Scene {
     this.checkpoint = { x: j.go.x, y: j.go.y };
     this.astuceEndurance = false;
     majBoutonArme(j.arme, j.munitions, j.segments);
+    majBoutonAction(false);
 
     this.construireZone();
     this.physics.add.collider(j.go, this.grObstacles);
@@ -803,6 +819,13 @@ class Aquad extends Phaser.Scene {
     this.grObstacles.add(c);
     this.caisses.push({ go:c, pv:2, flash:0, g: this.add.graphics().setDepth(p.y) });
   }
+  creerPierre(){
+    const p = this.poseLibre(60);
+    const c = this.add.rectangle(p.x, p.y, 16, 14, 0xffffff, 0);
+    this.physics.add.existing(c, true);
+    this.grObstacles.add(c);
+    this.pierres.push({ go:c, g: this.add.graphics().setDepth(p.y) });
+  }
   creerMonstre(type, x, y){
     const d = MONSTRES[type];
     const go = this.add.rectangle(x, y, d.taille[0], d.taille[1], 0xffffff, 0);
@@ -824,6 +847,7 @@ class Aquad extends Phaser.Scene {
     for (let i = 0; i < nRochers; i++) this.creerObstacle('rocher');
     for (let i = 0; i < nPalmiers; i++) this.creerObstacle('palmier');
     for (let i = 0; i < this.def.caisses; i++) this.creerCaisse();
+    for (let i = 0; i < (this.def.pierres || 0); i++) this.creerPierre();
 
     let n = Math.round(this.def.monstres * this.D.monstres);
     for (let i = 0; i < n; i++){
@@ -854,7 +878,11 @@ class Aquad extends Phaser.Scene {
     if (c.elan) j.go.body.setVelocity(j.fx * c.elan, j.fy * c.elan);
   }
   utiliserArme(j){
-    if (!j.arme){ SON.jouer('vide'); return; }
+    if (!j.arme){
+      SON.jouer('vide');
+      this.message('PAS D\'ARME — CASSE DES CAISSES');
+      return;
+    }
     if (j.attaque) return;
     if (j.munitions <= 0){ this.lancerAttaque(j, 'jet'); return; }
     j.munitions--;
@@ -896,15 +924,12 @@ class Aquad extends Phaser.Scene {
     const c = COUPS[j.attaque.type];
     if (!c.portee) return null;
     const portee = c.portee * (j.attaque.elastique ? CFG.porteeElastique : 1);
-    if (c.tourbillon)
-      return { cercle: new Phaser.Geom.Circle(j.go.x, j.go.y - 8, portee) };
     const cx = j.go.x + j.attaque.fx * (12 + portee/2);
     const cy = j.go.y + j.attaque.fy * (12 + portee/2) - 8;
     return { rect: new Phaser.Geom.Rectangle(cx - portee/2, cy - portee/2, portee, portee) };
   }
   toucheZone(z, limites){
     if (!z) return false;
-    if (z.cercle) return Phaser.Geom.Intersects.CircleToRectangle(z.cercle, limites);
     return Phaser.Geom.Intersects.RectangleToRectangle(z.rect, limites);
   }
   frapper(m, degats, recul, sourceX, sourceY){
@@ -958,9 +983,20 @@ class Aquad extends Phaser.Scene {
         vie: 0.26 + this.alea()*0.2, max: 0.46 });
   }
   blesser(j, sx, sy, degats){
-    if (j.invuln > 0 || j.roulade || this.etat !== 'jeu') return;
+    if (j.invuln > 0 || this.etat !== 'jeu') return;
     j.pv -= degats;
     j.invuln = CFG.invincibilite;
+    // le choc fait lâcher ce qu'on portait : ça se brise à nos pieds
+    if (j.porte){
+      this.eclat(j.go.x, j.go.y - 20, 1, 10, j.porte.type === 'caisse' ? 0xb07a3e : 0x8a8f9c);
+      if (j.porte.type === 'caisse'){
+        SON.jouer('caisse');
+        this.crier(j.go.x, j.go.y - 44, CRIS.caisse, '#e8b06a', 15);
+        this.creerObjet(j.go.x, j.go.y, this.butin());
+      }
+      j.porte = null;
+      majBoutonAction(false);
+    }
     const d = Math.hypot(j.go.x - sx, j.go.y - sy) || 1;
     j.go.body.setVelocity((j.go.x - sx)/d * 280, (j.go.y - sy)/d * 280);
     this.cameras.main.shake(140, 0.008);
@@ -1043,7 +1079,8 @@ class Aquad extends Phaser.Scene {
     }
     this.etat = 'traversee';
     this.transition = 0;
-    j.attaque = null; j.charge = null;
+    j.attaque = null; j.charge = null; j.porte = null;
+    majBoutonAction(false);
     j.go.body.setCollideWorldBounds(false);
     j.go.body.setVelocity(160, 0);        // il s'éloigne sur le ponton
     SON.jouer('ascenseur');
@@ -1073,7 +1110,8 @@ class Aquad extends Phaser.Scene {
     this.hudFin.setText('');
     j.pv = CFG.pvJoueur;
     j.invuln = CFG.invulnRenais;
-    j.attaque = null; j.charge = null; j.roulade = null;
+    j.attaque = null; j.charge = null; j.porte = null;
+    majBoutonAction(false);
     j.endurance = CFG.enduranceMax;
     j.go.body.reset(this.checkpoint.x, this.checkpoint.y);
     this.cameras.main.centerOn(this.checkpoint.x, this.checkpoint.y);
@@ -1105,19 +1143,19 @@ class Aquad extends Phaser.Scene {
         this.scene.restart();
         return;
       }
-      ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.roulPresse = false;
+      ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.actionPresse = false; ENTREE.armePresse = false;
       this.majEclats(dt); this.dessinerTout();
       return;
     }
     if (this.etat !== 'jeu'){
       if (ENTREE.validePresse){
-        ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.roulPresse = false;
+        ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.actionPresse = false; ENTREE.armePresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
         else if (this.etat === 'gameover') setTimeout(retourAuTitre, 0);
         else this.recommencer();
         return;
       }
-      ENTREE.relache = null; ENTREE.roulPresse = false;
+      ENTREE.relache = null; ENTREE.actionPresse = false; ENTREE.armePresse = false;
       this.majEclats(dt); this.dessinerTout();
       return;
     }
@@ -1159,32 +1197,18 @@ class Aquad extends Phaser.Scene {
     j.invuln = Math.max(0, j.invuln - dt);
     j.endurance = Math.min(CFG.enduranceMax, j.endurance + CFG.enduranceRegen * dt);
 
-    // ── roulade : élan bref, intouchable pendant ──
-    if (j.roulade){
-      j.roulade.t += dt;
-      if (j.roulade.t >= CFG.rouladeDuree){ j.roulade = null; }
-      else {
-        j.go.body.setVelocity(j.roulade.dx * CFG.rouladeVitesse, j.roulade.dy * CFG.rouladeVitesse);
-        return;   // pendant la roulade, rien d'autre ne pilote
+    // ── ✕ : soulever ce qui est à portée, ou lancer ce qu'on porte ──
+    if (ENTREE.actionPresse){
+      ENTREE.actionPresse = false;
+      if (!j.attaque){
+        if (j.porte) this.lancer(j);
+        else this.soulever(j);
       }
     }
-    if (ENTREE.roulPresse){
-      ENTREE.roulPresse = false;
-      if (!j.attaque && !j.roulade){
-        if (j.endurance >= 1){
-          j.endurance -= 1;
-          const n = Math.hypot(ENTREE.axeX, ENTREE.axeY);
-          const dx = n > 0.05 ? ENTREE.axeX / n : j.fx;
-          const dy = n > 0.05 ? ENTREE.axeY / n : j.fy;
-          j.roulade = { t: 0, dx, dy };
-          j.fx = dx; j.fy = dy;
-          SON.jouer('saut2');
-          this.crier(j.go.x, j.go.y - 34, CRIS.roulade, '#9fe8e0', 13);
-        } else if (!this.astuceEndurance){
-          this.astuceEndurance = true;
-          this.message("PLUS D'ENDURANCE — LA JAUGE REVIENT TOUTE SEULE");
-        }
-      }
+    // ── △ : l'arme en cours, dans la direction regardée ──
+    if (ENTREE.armePresse){
+      ENTREE.armePresse = false;
+      if (!j.porte) this.utiliserArme(j);
     }
 
     // ── coups : appui bref = normal, tenu = élastique ──
@@ -1194,11 +1218,11 @@ class Aquad extends Phaser.Scene {
     } else if (j.chargeAIgnorer && ENTREE.chargeAction !== j.chargeAIgnorer){
       j.chargeAIgnorer = null;
     }
-    if (!j.attaque){
-      if (ENTREE.chargeAction === 'poing' && j.arme && j.chargeAIgnorer !== 'poing'){
-        j.chargeAIgnorer = 'poing';
-        this.utiliserArme(j);
-      } else if (j.charge){
+    if (j.porte){
+      // les mains sont prises : pas de coup tant qu'on porte
+      ENTREE.relache = null; j.charge = null;
+    } else if (!j.attaque){
+      if (j.charge){
         j.charge.t = (performance.now() - j.charge.depuis) / 1000;
         const tenu = ENTREE.chargeAction === j.charge.action;
         if (!tenu || j.charge.t >= CFG.chargeMax){
@@ -1225,8 +1249,7 @@ class Aquad extends Phaser.Scene {
         const r = ENTREE.relache; ENTREE.relache = null;
         const elast = r.duree >= CFG.seuilElastique && j.endurance >= 1;
         if (elast) j.endurance -= 1;
-        if (r.action === 'poing' && j.arme) this.utiliserArme(j);
-        else this.lancerAttaque(j, r.action, elast);
+        this.lancerAttaque(j, r.action, elast);
       }
     }
 
@@ -1259,8 +1282,9 @@ class Aquad extends Phaser.Scene {
 
     // ── déplacement : deux axes analogiques ──
     const bloque = j.attaque && !COUPS[j.attaque.type].tir;
-    const cx = bloque ? 0 : ENTREE.axeX * CFG.vitesse;
-    const cy = bloque ? 0 : ENTREE.axeY * CFG.vitesse;
+    const lest = j.porte ? CFG.porteVitesse : 1;   // chargé, on avance moins vite
+    const cx = bloque ? 0 : ENTREE.axeX * CFG.vitesse * lest;
+    const cy = bloque ? 0 : ENTREE.axeY * CFG.vitesse * lest;
     const n = Math.hypot(ENTREE.axeX, ENTREE.axeY);
     if (n > 0.05 && !bloque){ j.fx = ENTREE.axeX / n; j.fy = ENTREE.axeY / n; }
 
@@ -1272,9 +1296,54 @@ class Aquad extends Phaser.Scene {
     j.phase += Math.hypot(b.velocity.x, b.velocity.y) * dt / 27;
 
     // point de retour : là où on marchait sain et sauf
-    if (j.invuln <= 0 && !j.roulade){
+    if (j.invuln <= 0){
       this.checkpoint.x = j.go.x;
       this.checkpoint.y = j.go.y;
+    }
+  }
+
+  // ── soulever et lancer, façon île aux trésors ───────────────
+  soulever(j){
+    let pris = null, prisD = 48, type = null;
+    for (const p of this.pierres){
+      const d = Math.hypot(p.go.x - j.go.x, p.go.y - j.go.y);
+      if (d < prisD){ prisD = d; pris = p; type = 'pierre'; }
+    }
+    for (const k of this.caisses){
+      const d = Math.hypot(k.go.x - j.go.x, k.go.y - j.go.y);
+      if (d < prisD){ prisD = d; pris = k; type = 'caisse'; }
+    }
+    if (!pris) return;
+    if (type === 'pierre') this.pierres = this.pierres.filter(p => p !== pris);
+    else this.caisses = this.caisses.filter(k => k !== pris);
+    pris.g.destroy();
+    pris.go.destroy();
+    j.porte = { type };
+    majBoutonAction(true);
+    SON.jouer('saut2');
+    this.crier(j.go.x, j.go.y - 44, CRIS.souleve, '#ffd166', 14);
+  }
+  lancer(j){
+    const type = j.porte.type;
+    j.porte = null;
+    majBoutonAction(false);
+    SON.jouer('ejecte');
+    this.crier(j.go.x, j.go.y - 44, CRIS.lancer, '#ffd166', 15);
+    this.cameras.main.shake(70, 0.003);
+    // le projectile vole à hauteur de corps (les monstres sont testés là) ;
+    // c'est le rendu qui le dessine plus haut, au-dessus de la tête
+    this.tirs.push({ lance:true, type,
+      x: j.go.x + j.fx * 18, y: j.go.y - 6 + j.fy * 18,
+      vx: j.fx * CFG.lancerVitesse, vy: j.fy * CFG.lancerVitesse,
+      degats: CFG.lancerDegats, recul: 320, vie: 0.9 });
+  }
+  impactLance(t){
+    this.eclat(t.x, t.y - 6, Math.sign(t.vx || 1), t.type === 'caisse' ? 14 : 8,
+               t.type === 'caisse' ? 0xb07a3e : 0x8a8f9c);
+    if (t.type === 'caisse'){
+      SON.jouer('caisse');
+      this.crier(t.x, t.y - 24, CRIS.caisse, '#e8b06a', 15);
+      this.creerObjet(t.x, t.y, this.butin());
     }
   }
 
@@ -1332,7 +1401,11 @@ class Aquad extends Phaser.Scene {
       t.vie -= dt;
       t.x += t.vx * dt;
       t.y += t.vy * dt;
-      if (t.vie <= 0){ t.fini = true; continue; }
+      if (t.vie <= 0){
+        t.fini = true;
+        if (t.lance) this.impactLance(t);   // l'objet retombe et se brise
+        continue;
+      }
       const boite = new Phaser.Geom.Rectangle(t.x - 5, t.y - 5, 10, 10);
       for (const m of this.monstres){
         if (m.mort) continue;
@@ -1341,7 +1414,7 @@ class Aquad extends Phaser.Scene {
           t.fini = true; break;
         }
       }
-      if (t.fini) continue;
+      if (t.fini){ if (t.lance) this.impactLance(t); continue; }
       for (const k of this.caisses){
         if (k.casse) continue;
         if (Phaser.Geom.Intersects.RectangleToRectangle(boite, k.go.getBounds())){
@@ -1349,6 +1422,7 @@ class Aquad extends Phaser.Scene {
           t.fini = true; break;
         }
       }
+      if (t.fini && t.lance) this.impactLance(t);
     }
     this.tirs = this.tirs.filter(t => !t.fini);
   }
@@ -1382,6 +1456,7 @@ Object.assign(Aquad.prototype, {
     this.dessinerSortie();
     for (const d of this.decors) this.animerDecor(d);
     this.dessinerCaisses();
+    this.dessinerPierres();
     this.dessinerMonstres();
     this.dessinerPerso(this.joueurs[0]);
     this.dessinerObjets();
@@ -1484,6 +1559,18 @@ Object.assign(Aquad.prototype, {
     if ((this.time.now / 120 | 0) % 3 === 0) this.dessinerDecor(d);
   },
 
+  dessinerPierres(){
+    for (const p of this.pierres){
+      const g = p.g; g.clear();
+      g.setDepth(p.go.y);
+      const x = p.go.x, y = p.go.y;
+      g.fillStyle(0x000000, 0.18); g.fillEllipse(x, y + 7, 20, 6);
+      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(x, y, 18, 13);
+      g.fillStyle(COUL.rocher, 1); g.fillEllipse(x - 2, y - 2, 14, 9);
+      g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(x - 4, y - 4, 6, 3);
+    }
+  },
+
   dessinerCaisses(){
     for (const k of this.caisses){
       const g = k.g; g.clear();
@@ -1576,12 +1663,17 @@ Object.assign(Aquad.prototype, {
     const sens = j.fx < -0.05 ? -1 : 1;
     let pieds, mains, inclinaison = 0, rotation = null;
 
-    if (j.roulade){
-      // boule : le corps tourne sur lui-même dans le sens de la course
-      const p = j.roulade.t / CFG.rouladeDuree;
-      rotation = p * Math.PI * 2 * (j.roulade.dx >= 0 ? 1 : -1);
-      pieds = [[-4, -8], [6, -6]];
-      mains = [[-6, EPAULE + 16], [7, EPAULE + 14]];
+    if (j.porte){
+      // les deux mains au-dessus de la tête, l'objet posé dessus
+      mains = [[-7, TETE - 7], [8, TETE - 7]];
+      if (marche){
+        const foulee = 5 + allure * 5;
+        pieds = [];
+        for (const dec of [Math.PI, 0]){
+          const p = t + dec, s = Math.sin(p);
+          pieds.push([-Math.cos(p)*foulee, Math.max(0, s) * -6]);
+        }
+      } else pieds = [[-6, 0], [6, 0]];
     } else if (j.attaque){
       const c = COUPS[j.attaque.type];
       const p = Phaser.Math.Clamp(j.attaque.t / c.duree, 0, 1);
@@ -1595,15 +1687,10 @@ Object.assign(Aquad.prototype, {
         mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
         pieds = [[-6, 0], [(6 + ext*26) * ela, -6 - ext*10]];
         inclinaison = 0.04 + ext*0.10;
-      } else if (c.faisceau || c.tir || c.jet){
+      } else {
+        // arme : le bras tendu vers la cible
         mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
         pieds = [[-9, 0], [8, 0]];
-      } else {
-        // le retourné : toupie — le corps tourne, bras étendus
-        rotation = p * Math.PI * 2 * sens;
-        const bras = 14 * (j.attaque.elastique ? CFG.porteeElastique : 1);
-        mains = [[-bras, EPAULE + 6], [bras, EPAULE + 6]];
-        pieds = [[-7, 0], [7, 0]];
       }
     } else if (j.charge){
       const k = Math.min(1, j.charge.t / CFG.seuilElastique);
@@ -1611,9 +1698,6 @@ Object.assign(Aquad.prototype, {
       if (j.charge.action === 'pied'){
         mains = [[-9, EPAULE + 4], [6, EPAULE + 10]];
         pieds = [[-7, 0], [-1 - k*4 + trem, -6 - k*4]];
-      } else if (j.charge.action === 'retourne'){
-        mains = [[-10 - k*3 + trem, EPAULE + 6], [8, EPAULE + 8]];
-        pieds = [[-6, 0], [5, 0]];
       } else {
         mains = [[-8, EPAULE + 8], [-2 - k*5 + trem, EPAULE + 4]];
         pieds = [[-9, 0], [7, 0]];
@@ -1681,10 +1765,26 @@ Object.assign(Aquad.prototype, {
     g.fillEllipse(hx+0.5, hy-4.6, 11.6, 5);
     g.fillRect(hx+2.5, hy-1.6, 2, 2.6);
 
+    // l'objet porté, posé sur les mains levées
+    if (j.porte){
+      const oy = TETE - 12 + Math.sin(this.time.now / 300) * 1.2;
+      if (j.porte.type === 'caisse'){
+        g.fillStyle(COUL.bois, 1);      g.fillRect(-12, oy - 20, 24, 20);
+        g.fillStyle(COUL.boisClair, 1); g.fillRect(-9, oy - 17, 18, 14);
+        g.lineStyle(2.5, COUL.boisOmbre, 1);
+        g.beginPath(); g.moveTo(-9, oy - 17); g.lineTo(9, oy - 3); g.strokePath();
+        g.beginPath(); g.moveTo(9, oy - 17); g.lineTo(-9, oy - 3); g.strokePath();
+      } else {
+        g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(0, oy - 9, 20, 14);
+        g.fillStyle(COUL.rocher, 1);      g.fillEllipse(-2, oy - 11, 15, 10);
+        g.fillStyle(0xb8bcc8, 0.7);       g.fillEllipse(-5, oy - 13, 6, 4);
+      }
+    }
+
     g.setPosition(j.go.x, j.go.y + 12);
     g.setRotation(rotation !== null ? rotation : sens * inclinaison);
     g.setScale(sens, 1);
-    g.setAlpha(j.invuln > 0 && !j.roulade && Math.floor(j.invuln*20) % 2 === 0 ? 0.35 : 1);
+    g.setAlpha(j.invuln > 0 && Math.floor(j.invuln*20) % 2 === 0 ? 0.35 : 1);
   },
   membre(g, hx, hy, tx, ty, l1, l2, sens, c1, c2, e1, e2){
     const dx = tx-hx, dy = ty-hy;
@@ -1780,6 +1880,25 @@ Object.assign(Aquad.prototype, {
       }
     }
     for (const t of this.tirs){
+      if (t.lance){
+        // la pierre ou la caisse en vol, qui tournoie — dessinée plus
+        // haut que sa position logique, comme jetée par-dessus la tête
+        g.fillStyle(0x000000, 0.15); g.fillEllipse(t.x, t.y + 10, 22, 6);
+        g.save();
+        g.translateCanvas(t.x, t.y - 16);
+        g.rotateCanvas((0.9 - t.vie) * 9 * Math.sign(t.vx || 1));
+        if (t.type === 'caisse'){
+          g.fillStyle(COUL.bois, 1);      g.fillRect(-11, -10, 22, 20);
+          g.fillStyle(COUL.boisClair, 1); g.fillRect(-8, -7, 16, 14);
+          g.lineStyle(2.5, COUL.boisOmbre, 1);
+          g.beginPath(); g.moveTo(-8, -7); g.lineTo(8, 7); g.strokePath();
+        } else {
+          g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(0, 0, 17, 12);
+          g.fillStyle(COUL.rocher, 1);      g.fillEllipse(-2, -2, 13, 8);
+        }
+        g.restore();
+        continue;
+      }
       if (t.jet){
         const a = (1.1 - t.vie) * 14 * Math.sign(t.vx || 1);
         const cx = Math.cos(a)*6, cy = Math.sin(a)*6;
@@ -1845,7 +1964,8 @@ function demarrer(){
   if (partie || typeof Phaser === 'undefined') return;
   document.body.classList.add('enjeu');
   SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
-  ENTREE.axeX = 0; ENTREE.axeY = 0; ENTREE.roulPresse = false;
+  ENTREE.axeX = 0; ENTREE.axeY = 0;
+  ENTREE.actionPresse = false; ENTREE.armePresse = false;
   ENTREE.chargeAction = null; ENTREE.relache = null; ENTREE.validePresse = false;
   PARTIE = nouvellePartieEtat();
 

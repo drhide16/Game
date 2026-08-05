@@ -17,13 +17,14 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 
 // ─────────────────────────────────────────────────────────────
 // MANETTE TACTILE
-// Vue de dessus : le joystick pilote les DEUX axes. ✕ est la roulade.
-// Un coup se CHARGE tant que son bouton est tenu, et part au relâché :
-// bref = coup normal, tenu = coup élastique (s'il reste de l'endurance).
+// Vue de dessus : le joystick pilote les DEUX axes. ✕ soulève une
+// pierre ou une caisse, puis la lance. △ tire l'arme en cours.
+// Un coup (□ ○) se CHARGE tant que son bouton est tenu, et part au
+// relâché : bref = normal, tenu = élastique (s'il reste de l'endurance).
 // ─────────────────────────────────────────────────────────────
 const ENTREE = {
   axeX:0, axeY:0,
-  roulPresse:false,
+  actionPresse:false, armePresse:false,
   chargeAction:null, chargeDebut:0, relache:null,
   validePresse:false,
 };
@@ -78,12 +79,13 @@ for (const b of document.querySelectorAll('.pad button')){
   b.addEventListener('pointerdown', e => {
     e.preventDefault();
     capturer(b, e.pointerId);
-    if (a === 'roulade') ENTREE.roulPresse = true;
+    if (a === 'action') ENTREE.actionPresse = true;
+    else if (a === 'arme') ENTREE.armePresse = true;   // l'arme part à l'appui, pas de charge
     else { ENTREE.chargeAction = a; ENTREE.chargeDebut = performance.now(); }
     ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
   const fin = () => {
-    if (a === 'roulade') return;
+    if (a === 'action' || a === 'arme') return;
     if (ENTREE.chargeAction === a){
       ENTREE.relache = { action:a, duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
       ENTREE.chargeAction = null;
@@ -93,8 +95,8 @@ for (const b of document.querySelectorAll('.pad button')){
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-// le bouton poing affiche l'arme en cours et ses munitions
-const boutonArme = document.querySelector('.b-carre');
+// le bouton △ affiche l'arme en cours et ses munitions
+const boutonArme = document.querySelector('.b-triangle');
 function majBoutonArme(arme, munitions, segments){
   const signe = boutonArme.querySelector('.signe');
   const nom   = boutonArme.querySelector('.nom');
@@ -107,9 +109,16 @@ function majBoutonArme(arme, munitions, segments){
     signe.textContent = '✦';
     nom.textContent = ARMES[arme].nom + ' ' + munitions + (segments > 0 ? '·' + segments : '');
   } else {
-    signe.textContent = '□';
-    nom.textContent = 'POING';
+    signe.textContent = '△';
+    nom.textContent = 'ARME';
   }
+}
+
+// le bouton ✕ dit ce qu'il fera : soulever, ou lancer ce qu'on porte
+const boutonAction = document.querySelector('.b-croix');
+function majBoutonAction(porte){
+  boutonAction.querySelector('.nom').textContent = porte ? 'LANCER' : 'SOULEVER';
+  boutonAction.classList.toggle('porte', !!porte);
 }
 
 const boutonSon = document.getElementById('son');
@@ -128,9 +137,12 @@ addEventListener('keydown', e => {
   if (e.code === 'ArrowUp')    { ENTREE.axeY = -1; e.preventDefault(); }
   if (e.code === 'ArrowDown')  { ENTREE.axeY =  1; e.preventDefault(); }
   if (e.code === 'Space' && !e.repeat){
-    ENTREE.roulPresse = true; ENTREE.validePresse = true; e.preventDefault();
+    ENTREE.actionPresse = true; ENTREE.validePresse = true; e.preventDefault();
   }
-  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  if (e.code === 'KeyE' && !e.repeat){
+    ENTREE.armePresse = true; ENTREE.validePresse = true;
+  }
+  const touches = { KeyA:'poing', KeyZ:'pied' };
   if (touches[e.code] && !e.repeat){
     ENTREE.chargeAction = touches[e.code]; ENTREE.chargeDebut = performance.now();
     ENTREE.validePresse = true;
@@ -139,7 +151,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
   if ((e.code === 'ArrowUp' && ENTREE.axeY < 0) || (e.code === 'ArrowDown' && ENTREE.axeY > 0)) ENTREE.axeY = 0;
-  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  const touches = { KeyA:'poing', KeyZ:'pied' };
   if (touches[e.code] && ENTREE.chargeAction === touches[e.code]){
     ENTREE.relache = { action:touches[e.code], duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
     ENTREE.chargeAction = null;

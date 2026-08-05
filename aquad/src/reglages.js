@@ -1,14 +1,16 @@
 // ─────────────────────────────────────────────────────────────
 // RÉGLAGES
-// AquaD se joue vu de dessus : pas de gravité, pas de saut — la
-// mobilité, c'est la ROULADE. Tout l'équilibrage est ici.
+// AquaD se joue vu de dessus : pas de gravité, pas de saut — et ✕
+// soulève les pierres et les caisses pour les lancer sur la faune.
+// Tout l'équilibrage est ici.
 // ─────────────────────────────────────────────────────────────
 const CFG = {
   vitesse:       250,   // joystick à fond ; l'axe est analogique
   accel:         2100,
   frein:         2600,
-  rouladeVitesse: 560,  // l'élan de la roulade
-  rouladeDuree:  0.27,  // pendant laquelle on est intouchable
+  porteVitesse:  0.75,  // on marche moins vite avec une caisse sur la tête
+  lancerVitesse: 520,   // l'objet lancé file à cette vitesse
+  lancerDegats:  2,
   pvJoueur:      5,
   invincibilite: 0.9,
   invulnRenais:  1.8,
@@ -17,7 +19,7 @@ const CFG = {
   porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât
   seuilElastique: 0.25, // tenir un coup au moins ce temps le rend élastique
   chargeMax:     0.8,   // au-delà, le coup part tout seul
-  enduranceMax:  3,     // coups élastiques et roulades puisent dedans
+  enduranceMax:  3,     // les coups élastiques puisent dedans
   enduranceRegen: 0.9,  // vide → pleine en ~3 s
   segmentsParBracelet: 3,
   segmentsMax:   5,
@@ -25,11 +27,9 @@ const CFG = {
 
 // Les zones de coup se placent DEVANT le personnage, dans la direction
 // regardée. portee = distance ; la zone est un carré de ce côté-là.
-// Le retourné devient une attaque tournoyante : il touche tout autour.
 const COUPS = {
   poing:    { duree:0.26, debut:0.05, fin:0.14, portee: 30, degats:1, recul:220, elan:  0, secousse:0.004, son:'poing' },
   pied:     { duree:0.44, debut:0.13, fin:0.27, portee: 40, degats:2, recul:370, elan:150, secousse:0.009, son:'pied' },
-  retourne: { duree:0.62, debut:0.18, fin:0.42, portee: 46, degats:3, recul:430, elan:  0, secousse:0.013, son:'retourne', tourbillon:true },
   laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
   pistolet: { duree:0.20, debut:0.05, fin:0.06, portee:  0, degats:2, recul:180, elan:0, secousse:0.005, son:'pistolet', tir:{ nb:1, vitesse:820, dispersion:0 } },
   fusil:    { duree:0.52, debut:0.07, fin:0.08, portee:  0, degats:2, recul:320, elan:0, secousse:0.014, son:'fusil',    tir:{ nb:3, vitesse:700, dispersion:0.13 } },
@@ -80,7 +80,8 @@ const CRIS = {
   vaincu:   ['SPLAF !', 'PAF !', 'BLOUP !'],
   boss:     ['K.O. !'],
   aie:      ['AÏE !', 'OUCH !', 'OUILLE !', 'OH !'],
-  roulade:  ['WOU !'],
+  souleve:  ['HOP !'],
+  lancer:   ['HAN !'],
   caisse:   ['CRAC !'],
 };
 
