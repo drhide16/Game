@@ -51,17 +51,17 @@ const ARMES = {
 // La faune du lagon. Vue de dessus, plus de règle des hauteurs : chaque
 // bestiole se joue par sa vitesse, sa masse et son comportement.
 const MONSTRES = {
-  crabe:   { pv:3,  taille:[30,24], vitesse: 95, patrouille:55, degats:1, silhouette:'brute',
+  crabe:   { pv:3,  taille:[30,24], vitesse: 68, patrouille:42, degats:1, silhouette:'brute',
              couleur:0xd86a4a, ombre:0x9c4530, oeil:0xffe08a },
-  meduse:  { pv:2,  taille:[26,26], vitesse: 70, patrouille:40, degats:1, silhouette:'drone', flotte:true,
+  meduse:  { pv:2,  taille:[26,26], vitesse: 52, patrouille:32, degats:1, silhouette:'drone', flotte:true,
              couleur:0x7fb8e8, ombre:0x4a7fb0, oeil:0xff5e5e },
-  bernard: { pv:6,  taille:[40,34], vitesse: 48, patrouille:26, degats:2, silhouette:'brute', gros:true,
+  bernard: { pv:6,  taille:[40,34], vitesse: 38, patrouille:22, degats:2, silhouette:'brute', gros:true,
              couleur:0x8a6a9c, ombre:0x5d4569, oeil:0xffe08a },
-  roiCrabe:{ pv:22, taille:[58,46], vitesse: 85, patrouille:40, degats:2, silhouette:'brute', gros:true, boss:true,
+  roiCrabe:{ pv:22, taille:[58,46], vitesse: 66, patrouille:40, degats:2, silhouette:'brute', gros:true, boss:true,
              nom:'LE ROI CRABE', couleur:0xc23a2e, ombre:0x7d211a, oeil:0xffd166,
              // il se ramasse puis fonce en travers, comme un crabe
              charge:{ portee:260, preparation:0.45, elan:520, repos:1.7 } },
-  reineMeduse:{ pv:26, taille:[54,54], vitesse: 65, patrouille:35, degats:2, silhouette:'drone', flotte:true, boss:true,
+  reineMeduse:{ pv:26, taille:[54,54], vitesse: 50, patrouille:35, degats:2, silhouette:'drone', flotte:true, boss:true,
              nom:'LA REINE MÉDUSE', couleur:0x9f7fe8, ombre:0x6a4fb0, oeil:0xff5e5e },
 };
 
