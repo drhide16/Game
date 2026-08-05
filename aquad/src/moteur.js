@@ -314,6 +314,13 @@ class Aquad extends Phaser.Scene {
     if (r < 0.50) return 'fusil';
     return 'coeur';
   }
+  poussiere(x, y){
+    for (let i = 0; i < 2; i++)
+      this.eclats.push({ x: x + (this.alea()-0.5)*10, y,
+        couleur: 0xd8c9a4,
+        vx: (this.alea()-0.5)*60, vy: -8 - this.alea()*16,
+        vie: 0.25 + this.alea()*0.1, max: 0.35 });
+  }
   eclat(x, y, sens, n, couleur){
     n = n || 7;
     for (let i = 0; i < n; i++)
@@ -646,6 +653,14 @@ class Aquad extends Phaser.Scene {
     b.setVelocityY(Math.abs(cy - b.velocity.y) <= ay ? cy : b.velocity.y + Math.sign(cy - b.velocity.y) * ay);
     j.phase += Math.hypot(b.velocity.x, b.velocity.y) * dt / 27;
 
+    // chaque pas posé soulève un peu de poussière : c'est elle qui dit
+    // que les pieds touchent le sol
+    const signe = Math.sign(Math.sin(j.phase));
+    if (Math.hypot(b.velocity.x, b.velocity.y) > 60 && signe !== j.pasSigne){
+      j.pasSigne = signe;
+      this.poussiere(j.go.x, j.go.y + 10);
+    } else if (signe !== j.pasSigne) j.pasSigne = signe;
+
     // point de retour : là où on marchait sain et sauf
     if (j.invuln <= 0){
       this.checkpoint.x = j.go.x;
@@ -730,6 +745,9 @@ class Aquad extends Phaser.Scene {
           const d = dist || 1;
           const v = m.def.vitesse * this.D.vitesse;
           m.go.body.setVelocity(dx/d * v, dy/d * v);
+          // les coureurs au sol soulèvent aussi leur poussière
+          if (!m.def.flotte && Math.sin(m.phase) > 0.95 && Math.sin(m.phase - dt*5) <= 0.95)
+            this.poussiere(m.go.x, m.go.y + m.def.taille[1]/2);
         } else {
           // patrouille : un point au hasard autour de la maison
           if (!m.cible || Math.hypot(m.cible.x - m.go.x, m.cible.y - m.go.y) < 20){

@@ -93,10 +93,16 @@ const CRIS = {
 
 const L = 900, H = 480;
 
+// toutes les ombres portées penchent du même côté : le soleil est UNIQUE,
+// au nord-ouest — c'est ce qui colle les personnages au sol
+const SOLEIL = { x:3, y:4 };
+
 const COUL = {
   // le lagon
   eauProfonde:0x1a6f8e, eau:0x2e9bb8, eauClaire:0x6fd0d8, ecume:0xd8f4ee,
   sable:0xe8d49a, sableOmbre:0xd0b877, herbe:0x7fb35e, herbeSombre:0x639446,
+  herbeClaire:0x8fc46e, fleur:0xf2e6cf, fleur2:0xffd166,
+  coquillage:0xf5ead0, sableMouille:0xc9ac6e, galet:0x9aa0ac,
   rocher:0x8a8f9c, rocherOmbre:0x5d6270,
   tronc:0x8a5a2b, palme:0x3f8a4f, palmeClaire:0x5cab68,
   ponton:0xb07a3e, pontonOmbre:0x6d4420,
