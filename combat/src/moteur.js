@@ -22,6 +22,7 @@ class Combat extends Phaser.Scene {
     this.etat = 'jeu'; this.accroupi = false;
     this.astuceBas = false; this.astuceHaut = false;
     this.eclats = []; this.objets = []; this.caisses = [];
+    this.bulles = []; this.bulleSuiv = 0;
     this.tirs = []; this.tirsEnnemis = [];
     this.msg = null; this.transition = 0;
     this.endurance = CFG.enduranceMax;
@@ -48,6 +49,13 @@ class Combat extends Phaser.Scene {
     this.perso     = this.add.graphics().setDepth(5);
     this.gEclats   = this.add.graphics().setDepth(6);
     this.gTirs     = this.add.graphics().setDepth(7);
+    // huit textes recycles pour les onomatopees : creer un objet texte a
+    // chaque coup coute cher, on fait tourner un petit pool
+    for (let i = 0; i < 8; i++){
+      const t = this.add.text(0, 0, '', { fontFamily:'Arcade, ui-monospace, monospace', fontSize:'18px', color:'#ffffff' })
+        .setStroke('#0d1120', 6).setOrigin(0.5).setDepth(8).setVisible(false);
+      this.bulles.push({ t, vie:0, max:1, vy:0 });
+    }
 
     this.construireNiveau();
     // Les limites sont posées APRÈS la construction : la sortie tombe où
@@ -207,6 +215,7 @@ class Combat extends Phaser.Scene {
     if (this.attaque) return;
     const c = COUPS[type];
     this.attaque = { type, t:0, bas:this.accroupi, elastique: !!elastique && !!c.portee, touches:new Set() };
+    if (this.attaque.elastique) this.crier(this.joueur.x, this.joueur.y - 32, CRIS.kiai, '#ffd166', 15);
     SON.jouer(c.son);
     if (c.secousse) this.cameras.main.shake(90, c.secousse);
     if (c.tir) this.tirer(c);
@@ -285,6 +294,7 @@ class Combat extends Phaser.Scene {
       m.blinde = 0.18;
       SON.jouer('blinde');
       this.eclat(m.go.x, m.go.y, 0, 3, COUL.blinde);
+      this.crier(m.go.x, m.go.y - m.def.taille[1]/2 - 14, CRIS.blinde, '#9fb4ff', 14);
       if (m.def.faible === 'bas' && !this.astuceBas){
         this.astuceBas = true;
         this.message("ACCROUPIS-TOI POUR TOUCHER LE VIOLET");
@@ -295,6 +305,7 @@ class Combat extends Phaser.Scene {
       return;
     }
     const dir = Math.sign(m.go.x - sourceX) || this.sens;
+    const hautCri = m.go.y - m.def.taille[1]/2 - 16;
     m.pv -= degats; m.flash = 0.14;
     if (!m.def.fixe){
       m.assomme = 0.22; m.prepare = 0;
@@ -302,10 +313,12 @@ class Combat extends Phaser.Scene {
     }
     SON.jouer('touche');
     this.eclat(m.go.x, m.go.y, dir);
+    if (m.pv > 0) this.crier(m.go.x, hautCri, ecrase ? CRIS.ecrase : CRIS.coup);
     if (m.pv <= 0){
       m.mort = true; this.vaincus++;
       SON.jouer('vaincu');
       this.eclat(m.go.x, m.go.y, dir, m.def.boss ? 34 : 14);
+      this.crier(m.go.x, hautCri, m.def.boss ? CRIS.boss : CRIS.vaincu, '#ffd166', m.def.boss ? 26 : 20);
       if (this.alea() < CFG.chanceCoeur || m.def.boss) this.creerObjet(m.go.x - 12, m.go.y - 8, 'coeur');
       // le boss offre aussi une vie : elle part de l'autre côté pour que
       // les deux cadeaux ne se confondent pas
@@ -325,6 +338,7 @@ class Combat extends Phaser.Scene {
     if (k.pv <= 0){
       k.casse = true;
       this.eclat(k.go.x, k.go.y - 4, this.sens, 16);
+      this.crier(k.go.x, k.go.y - 24, CRIS.caisse, '#e8b06a', 15);
       this.creerObjet(k.go.x, k.go.y - 8, this.butin());
       k.go.destroy();
     }
@@ -362,6 +376,7 @@ class Combat extends Phaser.Scene {
     this.joueur.body.setVelocity(dir * 240, -280);
     this.cameras.main.shake(140, 0.008);
     SON.jouer('degat');
+    this.crier(this.joueur.x, this.joueur.y - 28, CRIS.aie, '#ff9d94');
     if (this.pv <= 0){ this.pv = 0; this.terminer('Tu es hors de combat'); }
   }
 
@@ -845,8 +860,29 @@ class Combat extends Phaser.Scene {
     this.tirsEnnemis = this.tirsEnnemis.filter(t => !t.fini);
   }
 
+  // une onomatopee de manga : surgit, penche, monte un peu et s'efface
+  crier(x, y, mots, couleur, taille){
+    const b = this.bulles[this.bulleSuiv = (this.bulleSuiv + 1) % this.bulles.length];
+    b.t.setText(mots[Math.floor(this.alea() * mots.length)])
+      .setColor(couleur || '#ffffff')
+      .setFontSize(taille || 18)
+      .setPosition(x, y)
+      .setAngle((this.alea() * 2 - 1) * 14)
+      .setVisible(true);
+    b.vie = b.max = 0.55;
+    b.vy = -46;
+  }
   majEclats(dt){
     for (const e of this.eclats){ e.vie -= dt; e.vy += 900*dt; e.x += e.vx*dt; e.y += e.vy*dt; }
     this.eclats = this.eclats.filter(e => e.vie > 0);
+    for (const b of this.bulles){
+      if (b.vie <= 0) continue;
+      b.vie -= dt;
+      if (b.vie <= 0){ b.t.setVisible(false); continue; }
+      const k = 1 - b.vie / b.max;
+      b.t.y += b.vy * dt;
+      b.t.setScale(k < 0.25 ? 0.4 + (k / 0.25) * 0.8 : Math.max(1, 1.2 - (k - 0.25) * 0.3));
+      b.t.setAlpha(b.vie < 0.16 ? b.vie / 0.16 : 1);
+    }
   }
 }
