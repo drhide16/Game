@@ -11,7 +11,8 @@ function demarrer(){
   if (partie || typeof Phaser === 'undefined') return;
   document.body.classList.add('enjeu');
   SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
-  ENTREE.axeX = 0; ENTREE.axeY = 0; ENTREE.roulPresse = false;
+  ENTREE.axeX = 0; ENTREE.axeY = 0;
+  ENTREE.actionPresse = false; ENTREE.armePresse = false;
   ENTREE.chargeAction = null; ENTREE.relache = null; ENTREE.validePresse = false;
   PARTIE = nouvellePartieEtat();
 

@@ -25,7 +25,7 @@ class Aquad extends Phaser.Scene {
     this.tirs = []; this.tirsEnnemis = [];
     this.bulles = []; this.bulleSuiv = 0;
     this.msg = null; this.transition = 0;
-    this.monstres = []; this.decors = [];
+    this.monstres = []; this.decors = []; this.pierres = [];
 
     // le joueur ne sort pas de la terre : les limites physiques SONT l'île
     this.physics.world.setBounds(this.ileX, this.ileY, this.ileL, this.ileH);
@@ -44,7 +44,7 @@ class Aquad extends Phaser.Scene {
       arme: PARTIE.arme, munitions: PARTIE.munitions, segments: PARTIE.segments | 0,
       endurance: CFG.enduranceMax,
       attaque: null, charge: null, chargeAIgnorer: null,
-      roulade: null,
+      porte: null,                  // la pierre ou la caisse au-dessus de la tête
       g: this.add.graphics(),       // son calque de dessin, trié par y
     };
     this.physics.add.existing(j.go);
@@ -53,6 +53,7 @@ class Aquad extends Phaser.Scene {
     this.checkpoint = { x: j.go.x, y: j.go.y };
     this.astuceEndurance = false;
     majBoutonArme(j.arme, j.munitions, j.segments);
+    majBoutonAction(false);
 
     this.construireZone();
     this.physics.add.collider(j.go, this.grObstacles);
@@ -115,6 +116,13 @@ class Aquad extends Phaser.Scene {
     this.grObstacles.add(c);
     this.caisses.push({ go:c, pv:2, flash:0, g: this.add.graphics().setDepth(p.y) });
   }
+  creerPierre(){
+    const p = this.poseLibre(60);
+    const c = this.add.rectangle(p.x, p.y, 16, 14, 0xffffff, 0);
+    this.physics.add.existing(c, true);
+    this.grObstacles.add(c);
+    this.pierres.push({ go:c, g: this.add.graphics().setDepth(p.y) });
+  }
   creerMonstre(type, x, y){
     const d = MONSTRES[type];
     const go = this.add.rectangle(x, y, d.taille[0], d.taille[1], 0xffffff, 0);
@@ -136,6 +144,7 @@ class Aquad extends Phaser.Scene {
     for (let i = 0; i < nRochers; i++) this.creerObstacle('rocher');
     for (let i = 0; i < nPalmiers; i++) this.creerObstacle('palmier');
     for (let i = 0; i < this.def.caisses; i++) this.creerCaisse();
+    for (let i = 0; i < (this.def.pierres || 0); i++) this.creerPierre();
 
     let n = Math.round(this.def.monstres * this.D.monstres);
     for (let i = 0; i < n; i++){
@@ -166,7 +175,11 @@ class Aquad extends Phaser.Scene {
     if (c.elan) j.go.body.setVelocity(j.fx * c.elan, j.fy * c.elan);
   }
   utiliserArme(j){
-    if (!j.arme){ SON.jouer('vide'); return; }
+    if (!j.arme){
+      SON.jouer('vide');
+      this.message('PAS D\'ARME — CASSE DES CAISSES');
+      return;
+    }
     if (j.attaque) return;
     if (j.munitions <= 0){ this.lancerAttaque(j, 'jet'); return; }
     j.munitions--;
@@ -208,15 +221,12 @@ class Aquad extends Phaser.Scene {
     const c = COUPS[j.attaque.type];
     if (!c.portee) return null;
     const portee = c.portee * (j.attaque.elastique ? CFG.porteeElastique : 1);
-    if (c.tourbillon)
-      return { cercle: new Phaser.Geom.Circle(j.go.x, j.go.y - 8, portee) };
     const cx = j.go.x + j.attaque.fx * (12 + portee/2);
     const cy = j.go.y + j.attaque.fy * (12 + portee/2) - 8;
     return { rect: new Phaser.Geom.Rectangle(cx - portee/2, cy - portee/2, portee, portee) };
   }
   toucheZone(z, limites){
     if (!z) return false;
-    if (z.cercle) return Phaser.Geom.Intersects.CircleToRectangle(z.cercle, limites);
     return Phaser.Geom.Intersects.RectangleToRectangle(z.rect, limites);
   }
   frapper(m, degats, recul, sourceX, sourceY){
@@ -270,9 +280,20 @@ class Aquad extends Phaser.Scene {
         vie: 0.26 + this.alea()*0.2, max: 0.46 });
   }
   blesser(j, sx, sy, degats){
-    if (j.invuln > 0 || j.roulade || this.etat !== 'jeu') return;
+    if (j.invuln > 0 || this.etat !== 'jeu') return;
     j.pv -= degats;
     j.invuln = CFG.invincibilite;
+    // le choc fait lâcher ce qu'on portait : ça se brise à nos pieds
+    if (j.porte){
+      this.eclat(j.go.x, j.go.y - 20, 1, 10, j.porte.type === 'caisse' ? 0xb07a3e : 0x8a8f9c);
+      if (j.porte.type === 'caisse'){
+        SON.jouer('caisse');
+        this.crier(j.go.x, j.go.y - 44, CRIS.caisse, '#e8b06a', 15);
+        this.creerObjet(j.go.x, j.go.y, this.butin());
+      }
+      j.porte = null;
+      majBoutonAction(false);
+    }
     const d = Math.hypot(j.go.x - sx, j.go.y - sy) || 1;
     j.go.body.setVelocity((j.go.x - sx)/d * 280, (j.go.y - sy)/d * 280);
     this.cameras.main.shake(140, 0.008);
@@ -355,7 +376,8 @@ class Aquad extends Phaser.Scene {
     }
     this.etat = 'traversee';
     this.transition = 0;
-    j.attaque = null; j.charge = null;
+    j.attaque = null; j.charge = null; j.porte = null;
+    majBoutonAction(false);
     j.go.body.setCollideWorldBounds(false);
     j.go.body.setVelocity(160, 0);        // il s'éloigne sur le ponton
     SON.jouer('ascenseur');
@@ -385,7 +407,8 @@ class Aquad extends Phaser.Scene {
     this.hudFin.setText('');
     j.pv = CFG.pvJoueur;
     j.invuln = CFG.invulnRenais;
-    j.attaque = null; j.charge = null; j.roulade = null;
+    j.attaque = null; j.charge = null; j.porte = null;
+    majBoutonAction(false);
     j.endurance = CFG.enduranceMax;
     j.go.body.reset(this.checkpoint.x, this.checkpoint.y);
     this.cameras.main.centerOn(this.checkpoint.x, this.checkpoint.y);
@@ -417,19 +440,19 @@ class Aquad extends Phaser.Scene {
         this.scene.restart();
         return;
       }
-      ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.roulPresse = false;
+      ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.actionPresse = false; ENTREE.armePresse = false;
       this.majEclats(dt); this.dessinerTout();
       return;
     }
     if (this.etat !== 'jeu'){
       if (ENTREE.validePresse){
-        ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.roulPresse = false;
+        ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.actionPresse = false; ENTREE.armePresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
         else if (this.etat === 'gameover') setTimeout(retourAuTitre, 0);
         else this.recommencer();
         return;
       }
-      ENTREE.relache = null; ENTREE.roulPresse = false;
+      ENTREE.relache = null; ENTREE.actionPresse = false; ENTREE.armePresse = false;
       this.majEclats(dt); this.dessinerTout();
       return;
     }
@@ -471,32 +494,18 @@ class Aquad extends Phaser.Scene {
     j.invuln = Math.max(0, j.invuln - dt);
     j.endurance = Math.min(CFG.enduranceMax, j.endurance + CFG.enduranceRegen * dt);
 
-    // ── roulade : élan bref, intouchable pendant ──
-    if (j.roulade){
-      j.roulade.t += dt;
-      if (j.roulade.t >= CFG.rouladeDuree){ j.roulade = null; }
-      else {
-        j.go.body.setVelocity(j.roulade.dx * CFG.rouladeVitesse, j.roulade.dy * CFG.rouladeVitesse);
-        return;   // pendant la roulade, rien d'autre ne pilote
+    // ── ✕ : soulever ce qui est à portée, ou lancer ce qu'on porte ──
+    if (ENTREE.actionPresse){
+      ENTREE.actionPresse = false;
+      if (!j.attaque){
+        if (j.porte) this.lancer(j);
+        else this.soulever(j);
       }
     }
-    if (ENTREE.roulPresse){
-      ENTREE.roulPresse = false;
-      if (!j.attaque && !j.roulade){
-        if (j.endurance >= 1){
-          j.endurance -= 1;
-          const n = Math.hypot(ENTREE.axeX, ENTREE.axeY);
-          const dx = n > 0.05 ? ENTREE.axeX / n : j.fx;
-          const dy = n > 0.05 ? ENTREE.axeY / n : j.fy;
-          j.roulade = { t: 0, dx, dy };
-          j.fx = dx; j.fy = dy;
-          SON.jouer('saut2');
-          this.crier(j.go.x, j.go.y - 34, CRIS.roulade, '#9fe8e0', 13);
-        } else if (!this.astuceEndurance){
-          this.astuceEndurance = true;
-          this.message("PLUS D'ENDURANCE — LA JAUGE REVIENT TOUTE SEULE");
-        }
-      }
+    // ── △ : l'arme en cours, dans la direction regardée ──
+    if (ENTREE.armePresse){
+      ENTREE.armePresse = false;
+      if (!j.porte) this.utiliserArme(j);
     }
 
     // ── coups : appui bref = normal, tenu = élastique ──
@@ -506,11 +515,11 @@ class Aquad extends Phaser.Scene {
     } else if (j.chargeAIgnorer && ENTREE.chargeAction !== j.chargeAIgnorer){
       j.chargeAIgnorer = null;
     }
-    if (!j.attaque){
-      if (ENTREE.chargeAction === 'poing' && j.arme && j.chargeAIgnorer !== 'poing'){
-        j.chargeAIgnorer = 'poing';
-        this.utiliserArme(j);
-      } else if (j.charge){
+    if (j.porte){
+      // les mains sont prises : pas de coup tant qu'on porte
+      ENTREE.relache = null; j.charge = null;
+    } else if (!j.attaque){
+      if (j.charge){
         j.charge.t = (performance.now() - j.charge.depuis) / 1000;
         const tenu = ENTREE.chargeAction === j.charge.action;
         if (!tenu || j.charge.t >= CFG.chargeMax){
@@ -537,8 +546,7 @@ class Aquad extends Phaser.Scene {
         const r = ENTREE.relache; ENTREE.relache = null;
         const elast = r.duree >= CFG.seuilElastique && j.endurance >= 1;
         if (elast) j.endurance -= 1;
-        if (r.action === 'poing' && j.arme) this.utiliserArme(j);
-        else this.lancerAttaque(j, r.action, elast);
+        this.lancerAttaque(j, r.action, elast);
       }
     }
 
@@ -571,8 +579,9 @@ class Aquad extends Phaser.Scene {
 
     // ── déplacement : deux axes analogiques ──
     const bloque = j.attaque && !COUPS[j.attaque.type].tir;
-    const cx = bloque ? 0 : ENTREE.axeX * CFG.vitesse;
-    const cy = bloque ? 0 : ENTREE.axeY * CFG.vitesse;
+    const lest = j.porte ? CFG.porteVitesse : 1;   // chargé, on avance moins vite
+    const cx = bloque ? 0 : ENTREE.axeX * CFG.vitesse * lest;
+    const cy = bloque ? 0 : ENTREE.axeY * CFG.vitesse * lest;
     const n = Math.hypot(ENTREE.axeX, ENTREE.axeY);
     if (n > 0.05 && !bloque){ j.fx = ENTREE.axeX / n; j.fy = ENTREE.axeY / n; }
 
@@ -584,9 +593,54 @@ class Aquad extends Phaser.Scene {
     j.phase += Math.hypot(b.velocity.x, b.velocity.y) * dt / 27;
 
     // point de retour : là où on marchait sain et sauf
-    if (j.invuln <= 0 && !j.roulade){
+    if (j.invuln <= 0){
       this.checkpoint.x = j.go.x;
       this.checkpoint.y = j.go.y;
+    }
+  }
+
+  // ── soulever et lancer, façon île aux trésors ───────────────
+  soulever(j){
+    let pris = null, prisD = 48, type = null;
+    for (const p of this.pierres){
+      const d = Math.hypot(p.go.x - j.go.x, p.go.y - j.go.y);
+      if (d < prisD){ prisD = d; pris = p; type = 'pierre'; }
+    }
+    for (const k of this.caisses){
+      const d = Math.hypot(k.go.x - j.go.x, k.go.y - j.go.y);
+      if (d < prisD){ prisD = d; pris = k; type = 'caisse'; }
+    }
+    if (!pris) return;
+    if (type === 'pierre') this.pierres = this.pierres.filter(p => p !== pris);
+    else this.caisses = this.caisses.filter(k => k !== pris);
+    pris.g.destroy();
+    pris.go.destroy();
+    j.porte = { type };
+    majBoutonAction(true);
+    SON.jouer('saut2');
+    this.crier(j.go.x, j.go.y - 44, CRIS.souleve, '#ffd166', 14);
+  }
+  lancer(j){
+    const type = j.porte.type;
+    j.porte = null;
+    majBoutonAction(false);
+    SON.jouer('ejecte');
+    this.crier(j.go.x, j.go.y - 44, CRIS.lancer, '#ffd166', 15);
+    this.cameras.main.shake(70, 0.003);
+    // le projectile vole à hauteur de corps (les monstres sont testés là) ;
+    // c'est le rendu qui le dessine plus haut, au-dessus de la tête
+    this.tirs.push({ lance:true, type,
+      x: j.go.x + j.fx * 18, y: j.go.y - 6 + j.fy * 18,
+      vx: j.fx * CFG.lancerVitesse, vy: j.fy * CFG.lancerVitesse,
+      degats: CFG.lancerDegats, recul: 320, vie: 0.9 });
+  }
+  impactLance(t){
+    this.eclat(t.x, t.y - 6, Math.sign(t.vx || 1), t.type === 'caisse' ? 14 : 8,
+               t.type === 'caisse' ? 0xb07a3e : 0x8a8f9c);
+    if (t.type === 'caisse'){
+      SON.jouer('caisse');
+      this.crier(t.x, t.y - 24, CRIS.caisse, '#e8b06a', 15);
+      this.creerObjet(t.x, t.y, this.butin());
     }
   }
 
@@ -644,7 +698,11 @@ class Aquad extends Phaser.Scene {
       t.vie -= dt;
       t.x += t.vx * dt;
       t.y += t.vy * dt;
-      if (t.vie <= 0){ t.fini = true; continue; }
+      if (t.vie <= 0){
+        t.fini = true;
+        if (t.lance) this.impactLance(t);   // l'objet retombe et se brise
+        continue;
+      }
       const boite = new Phaser.Geom.Rectangle(t.x - 5, t.y - 5, 10, 10);
       for (const m of this.monstres){
         if (m.mort) continue;
@@ -653,7 +711,7 @@ class Aquad extends Phaser.Scene {
           t.fini = true; break;
         }
       }
-      if (t.fini) continue;
+      if (t.fini){ if (t.lance) this.impactLance(t); continue; }
       for (const k of this.caisses){
         if (k.casse) continue;
         if (Phaser.Geom.Intersects.RectangleToRectangle(boite, k.go.getBounds())){
@@ -661,6 +719,7 @@ class Aquad extends Phaser.Scene {
           t.fini = true; break;
         }
       }
+      if (t.fini && t.lance) this.impactLance(t);
     }
     this.tirs = this.tirs.filter(t => !t.fini);
   }

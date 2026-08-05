@@ -176,16 +176,18 @@
   /* 7px : « RETOURNÉ » est le plus long des quatre et doit tenir dans le rond */
   .pad button .nom{font-size:7px;letter-spacing:.03em;margin-top:3px;color:rgba(203,213,240,.65)}
   .pad button:active{background:rgba(77,90,150,.8)}
+  /* △ est le bouton arme : il s'allume dès qu'on ramasse un bracelet */
   .b-triangle{--case:1/2/2/3;color:#4dd6c1}
-  .b-rond    {--case:2/3/3/4;color:#e2584d}
-  .b-croix   {--case:3/2/4/3;color:#6f9bff}
-  /* le poing cède sa place à l'arme dès qu'on en ramasse une */
-  .b-carre   {--case:2/1/3/2;color:#e585c8}
-  .b-carre.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
-  .b-carre.armee .nom{color:rgba(233,182,255,.9)}
+  .b-triangle.armee{color:#c46bff;background:rgba(60,26,86,.6);box-shadow:0 0 16px rgba(196,107,255,.45)}
+  .b-triangle.armee .nom{color:rgba(233,182,255,.9)}
   /* bracelet vide : l'appui éjecte le segment usé, le bouton vire à l'orange */
-  .b-carre.armee.vide{color:#ff9d2e;background:rgba(86,50,16,.6);box-shadow:0 0 16px rgba(255,157,46,.5)}
-  .b-carre.armee.vide .nom{color:rgba(255,220,170,.95)}
+  .b-triangle.armee.vide{color:#ff9d2e;background:rgba(86,50,16,.6);box-shadow:0 0 16px rgba(255,157,46,.5)}
+  .b-triangle.armee.vide .nom{color:rgba(255,220,170,.95)}
+  .b-rond    {--case:2/3/3/4;color:#e2584d}
+  /* ✕ passe en LANCER quand on porte quelque chose */
+  .b-croix   {--case:3/2/4/3;color:#6f9bff}
+  .b-croix.porte{color:#ffd166;background:rgba(86,70,16,.55);box-shadow:0 0 16px rgba(255,209,102,.45)}
+  .b-carre   {--case:2/1/3/2;color:#e585c8}
 
   @media (max-height:430px){
     .socle{width:112px;height:112px}
@@ -214,7 +216,7 @@
   <div class="presente">PRÉSENTE</div>
   <div class="jeu">AQUAD</div>
   <div class="glyphes"><i class="g1">△</i><i class="g2">□</i><i class="g3">○</i><i class="g4">✕</i></div>
-  <div class="aide">VUE DE DESSUS &nbsp;·&nbsp; ✕ ROULADE</div>
+  <div class="aide">✕ SOULÈVE PIERRES ET CAISSES · PUIS LANCE</div>
   <div class="aide">TIENS UN COUP APPUYÉ → ÉLASTIQUE</div>
   <div class="choix-diff" id="choixDiff">
     <button data-d="facile">FACILE</button><button data-d="moyen">MOYEN</button><button data-d="difficile">DIFFICILE</button>
@@ -232,10 +234,10 @@
     <div class="pouce" id="pouce"></div>
   </div>
   <div class="pad">
-    <button class="b-triangle" data-action="retourne"><span class="signe">△</span><span class="nom">RETOURNÉ</span></button>
+    <button class="b-triangle" data-action="arme"><span class="signe">△</span><span class="nom">ARME</span></button>
     <button class="b-carre"    data-action="poing"><span class="signe">□</span><span class="nom">POING</span></button>
     <button class="b-rond"     data-action="pied"><span class="signe">○</span><span class="nom">PIED</span></button>
-    <button class="b-croix"    data-action="roulade"><span class="signe">✕</span><span class="nom">ROULADE</span></button>
+    <button class="b-croix"    data-action="action"><span class="signe">✕</span><span class="nom">SOULEVER</span></button>
   </div>
 </div>
 

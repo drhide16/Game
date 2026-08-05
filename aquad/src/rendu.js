@@ -11,6 +11,7 @@ Object.assign(Aquad.prototype, {
     this.dessinerSortie();
     for (const d of this.decors) this.animerDecor(d);
     this.dessinerCaisses();
+    this.dessinerPierres();
     this.dessinerMonstres();
     this.dessinerPerso(this.joueurs[0]);
     this.dessinerObjets();
@@ -113,6 +114,18 @@ Object.assign(Aquad.prototype, {
     if ((this.time.now / 120 | 0) % 3 === 0) this.dessinerDecor(d);
   },
 
+  dessinerPierres(){
+    for (const p of this.pierres){
+      const g = p.g; g.clear();
+      g.setDepth(p.go.y);
+      const x = p.go.x, y = p.go.y;
+      g.fillStyle(0x000000, 0.18); g.fillEllipse(x, y + 7, 20, 6);
+      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(x, y, 18, 13);
+      g.fillStyle(COUL.rocher, 1); g.fillEllipse(x - 2, y - 2, 14, 9);
+      g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(x - 4, y - 4, 6, 3);
+    }
+  },
+
   dessinerCaisses(){
     for (const k of this.caisses){
       const g = k.g; g.clear();
@@ -205,12 +218,17 @@ Object.assign(Aquad.prototype, {
     const sens = j.fx < -0.05 ? -1 : 1;
     let pieds, mains, inclinaison = 0, rotation = null;
 
-    if (j.roulade){
-      // boule : le corps tourne sur lui-même dans le sens de la course
-      const p = j.roulade.t / CFG.rouladeDuree;
-      rotation = p * Math.PI * 2 * (j.roulade.dx >= 0 ? 1 : -1);
-      pieds = [[-4, -8], [6, -6]];
-      mains = [[-6, EPAULE + 16], [7, EPAULE + 14]];
+    if (j.porte){
+      // les deux mains au-dessus de la tête, l'objet posé dessus
+      mains = [[-7, TETE - 7], [8, TETE - 7]];
+      if (marche){
+        const foulee = 5 + allure * 5;
+        pieds = [];
+        for (const dec of [Math.PI, 0]){
+          const p = t + dec, s = Math.sin(p);
+          pieds.push([-Math.cos(p)*foulee, Math.max(0, s) * -6]);
+        }
+      } else pieds = [[-6, 0], [6, 0]];
     } else if (j.attaque){
       const c = COUPS[j.attaque.type];
       const p = Phaser.Math.Clamp(j.attaque.t / c.duree, 0, 1);
@@ -224,15 +242,10 @@ Object.assign(Aquad.prototype, {
         mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
         pieds = [[-6, 0], [(6 + ext*26) * ela, -6 - ext*10]];
         inclinaison = 0.04 + ext*0.10;
-      } else if (c.faisceau || c.tir || c.jet){
+      } else {
+        // arme : le bras tendu vers la cible
         mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
         pieds = [[-9, 0], [8, 0]];
-      } else {
-        // le retourné : toupie — le corps tourne, bras étendus
-        rotation = p * Math.PI * 2 * sens;
-        const bras = 14 * (j.attaque.elastique ? CFG.porteeElastique : 1);
-        mains = [[-bras, EPAULE + 6], [bras, EPAULE + 6]];
-        pieds = [[-7, 0], [7, 0]];
       }
     } else if (j.charge){
       const k = Math.min(1, j.charge.t / CFG.seuilElastique);
@@ -240,9 +253,6 @@ Object.assign(Aquad.prototype, {
       if (j.charge.action === 'pied'){
         mains = [[-9, EPAULE + 4], [6, EPAULE + 10]];
         pieds = [[-7, 0], [-1 - k*4 + trem, -6 - k*4]];
-      } else if (j.charge.action === 'retourne'){
-        mains = [[-10 - k*3 + trem, EPAULE + 6], [8, EPAULE + 8]];
-        pieds = [[-6, 0], [5, 0]];
       } else {
         mains = [[-8, EPAULE + 8], [-2 - k*5 + trem, EPAULE + 4]];
         pieds = [[-9, 0], [7, 0]];
@@ -310,10 +320,26 @@ Object.assign(Aquad.prototype, {
     g.fillEllipse(hx+0.5, hy-4.6, 11.6, 5);
     g.fillRect(hx+2.5, hy-1.6, 2, 2.6);
 
+    // l'objet porté, posé sur les mains levées
+    if (j.porte){
+      const oy = TETE - 12 + Math.sin(this.time.now / 300) * 1.2;
+      if (j.porte.type === 'caisse'){
+        g.fillStyle(COUL.bois, 1);      g.fillRect(-12, oy - 20, 24, 20);
+        g.fillStyle(COUL.boisClair, 1); g.fillRect(-9, oy - 17, 18, 14);
+        g.lineStyle(2.5, COUL.boisOmbre, 1);
+        g.beginPath(); g.moveTo(-9, oy - 17); g.lineTo(9, oy - 3); g.strokePath();
+        g.beginPath(); g.moveTo(9, oy - 17); g.lineTo(-9, oy - 3); g.strokePath();
+      } else {
+        g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(0, oy - 9, 20, 14);
+        g.fillStyle(COUL.rocher, 1);      g.fillEllipse(-2, oy - 11, 15, 10);
+        g.fillStyle(0xb8bcc8, 0.7);       g.fillEllipse(-5, oy - 13, 6, 4);
+      }
+    }
+
     g.setPosition(j.go.x, j.go.y + 12);
     g.setRotation(rotation !== null ? rotation : sens * inclinaison);
     g.setScale(sens, 1);
-    g.setAlpha(j.invuln > 0 && !j.roulade && Math.floor(j.invuln*20) % 2 === 0 ? 0.35 : 1);
+    g.setAlpha(j.invuln > 0 && Math.floor(j.invuln*20) % 2 === 0 ? 0.35 : 1);
   },
   membre(g, hx, hy, tx, ty, l1, l2, sens, c1, c2, e1, e2){
     const dx = tx-hx, dy = ty-hy;
@@ -409,6 +435,25 @@ Object.assign(Aquad.prototype, {
       }
     }
     for (const t of this.tirs){
+      if (t.lance){
+        // la pierre ou la caisse en vol, qui tournoie — dessinée plus
+        // haut que sa position logique, comme jetée par-dessus la tête
+        g.fillStyle(0x000000, 0.15); g.fillEllipse(t.x, t.y + 10, 22, 6);
+        g.save();
+        g.translateCanvas(t.x, t.y - 16);
+        g.rotateCanvas((0.9 - t.vie) * 9 * Math.sign(t.vx || 1));
+        if (t.type === 'caisse'){
+          g.fillStyle(COUL.bois, 1);      g.fillRect(-11, -10, 22, 20);
+          g.fillStyle(COUL.boisClair, 1); g.fillRect(-8, -7, 16, 14);
+          g.lineStyle(2.5, COUL.boisOmbre, 1);
+          g.beginPath(); g.moveTo(-8, -7); g.lineTo(8, 7); g.strokePath();
+        } else {
+          g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(0, 0, 17, 12);
+          g.fillStyle(COUL.rocher, 1);      g.fillEllipse(-2, -2, 13, 8);
+        }
+        g.restore();
+        continue;
+      }
       if (t.jet){
         const a = (1.1 - t.vie) * 14 * Math.sign(t.vx || 1);
         const cx = Math.cos(a)*6, cy = Math.sin(a)*6;
