@@ -6,6 +6,7 @@ class Combat extends Phaser.Scene {
 
   create(){
     this.def = NIVEAUX[Math.min(PARTIE.niveau, NIVEAUX.length - 1)];
+    this.D = DIFFICULTES[PARTIE.difficulte] || DIFFICULTES.moyen;
     this.largeur = this.def.largeur;
     // graine dérivée de l'étage : chaque étage a sa propre disposition,
     // et mourir ne la redessine pas
@@ -65,17 +66,17 @@ class Combat extends Phaser.Scene {
 
     this.hud = this.add.graphics().setScrollFactor(0).setDepth(10);
     this.hudTexte = this.add.text(22, 60, '',
-      { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'12px', color:'#8d9ac4' })
-      .setScrollFactor(0).setDepth(10);
+      { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'12px', color:'#aeb9dd' })
+      .setStroke('#0d1120', 3).setScrollFactor(0).setDepth(10);
     this.hudMsg = this.add.text(L/2, 96, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'13px', color:'#ffd98a' })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
+      .setStroke('#0d1120', 4).setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
     this.hudBoss = this.add.text(L/2, H - 48, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'11px', color:'#ffb0a8' })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
+      .setStroke('#0d1120', 3).setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
     this.hudFin = this.add.text(L/2, H/2 - 30, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'18px', color:'#cbd5f0', align:'center' })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(11);
+      .setStroke('#0d1120', 5).setOrigin(0.5).setScrollFactor(0).setDepth(11);
 
     this.message(this.def.nom + '  —  ' + this.def.sous);
   }
@@ -91,6 +92,7 @@ class Combat extends Phaser.Scene {
     const t = this.def.teinte;
     if (this.def.decor === 'interieur') return t ? [t.sol, t.solBord] : [COUL.solDedans, COUL.solBordDedans];
     if (this.def.decor === 'toit')      return [COUL.solToit, COUL.solBordToit];
+    if (t) return [t.sol, t.solBord];   // forêt, désert, ville de jour
     const u = this.urbain(x);
     return [this.melange(COUL.sol, COUL.solVille, u), this.melange(COUL.solBord, COUL.solBordVille, u)];
   }
@@ -137,8 +139,9 @@ class Combat extends Phaser.Scene {
       this.physics.add.collider(go, this.plateformes);
       this.physics.add.collider(go, this.grCaisses);
     }
+    const pv = Math.max(1, Math.round(d.pv * this.D.pv));
     const m = {
-      go, type, def:d, pv:d.pv, pvMax:d.pv, assomme:0, flash:0, blinde:0,
+      go, type, def:d, pv, pvMax:pv, assomme:0, flash:0, blinde:0,
       dir:-1, minX, maxX, baseY:y, phase:this.alea()*6,
       prepare:0, repos:0, vise:0,
     };
@@ -173,7 +176,9 @@ class Combat extends Phaser.Scene {
       this.creerSol(x, long);
       if (this.alea() < (dedans ? 0.6 : 0.4))
         this.creerPlateforme(x + long*0.35, SOL_Y - 100 - this.alea()*40, 110 + this.alea()*80);
-      const nb = 1 + (this.alea() < 0.45 ? 1 : 0);
+      let nb = 1 + (this.alea() < 0.45 ? 1 : 0);
+      if (this.D.monstres > 1 && this.alea() < this.D.monstres - 1) nb++;
+      if (this.D.monstres < 1 && this.alea() > this.D.monstres && nb > 1) nb--;
       for (let i = 0; i < nb; i++){
         const mx = x + 80 + this.alea()*(long - 160);
         this.creerMonstre(this.tirerType(mx), mx, x + 30, x + long - 30);
@@ -258,11 +263,12 @@ class Combat extends Phaser.Scene {
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
     if (!c.portee) return [];
+    const portee = c.portee * (PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1);
     const dirs = c.bilateral ? [1, -1] : [this.sens];
     const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
     return dirs.map(d => {
-      const cx = this.joueur.x + d * (14 + c.portee/2);
-      return new Phaser.Geom.Rectangle(cx - c.portee/2, y - c.hauteur/2, c.portee, c.hauteur);
+      const cx = this.joueur.x + d * (14 + portee/2);
+      return new Phaser.Geom.Rectangle(cx - portee/2, y - c.hauteur/2, portee, c.hauteur);
     });
   }
   vulnerable(m, bas){
@@ -270,7 +276,7 @@ class Combat extends Phaser.Scene {
     if (m.def.faible === 'haut') return !bas;
     return true;
   }
-  frapper(m, degats, recul, bas, sourceX, ecrase){
+  frapper(m, degats, recul, bas, sourceX, ecrase, origine){
     // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
     // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
     if (!ecrase && !this.vulnerable(m, bas)){
@@ -303,11 +309,23 @@ class Combat extends Phaser.Scene {
       // les deux cadeaux ne se confondent pas
       if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
       m.go.destroy();
+      this.progresser(origine);
       if (m.def.boss){
         this.bossVivant = false;
         if (m.def.final) this.gagnerPartie();
         else this.message(m.def.nom + ' EST À TERRE  —  LA SORTIE S\'OUVRE');
       }
+    }
+  }
+  // trois victoires avec le même coup : il devient élastique — portée
+  // accrue de 65 % et un dégât de plus
+  progresser(origine){
+    if (!origine || !(origine in PARTIE.maitrise) || PARTIE.elastique[origine]) return;
+    PARTIE.maitrise[origine]++;
+    if (PARTIE.maitrise[origine] >= CFG.maitrisePour){
+      PARTIE.elastique[origine] = true;
+      SON.jouer('competence');
+      this.message('✨ ' + NOMS_ELASTIQUES[origine] + ' DÉBLOQUÉ');
     }
   }
   casser(k, degats){
@@ -551,7 +569,8 @@ class Combat extends Phaser.Scene {
             if (m.mort || this.attaque.touches.has(m)) continue;
             if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, m.go.getBounds()))){
               this.attaque.touches.add(m);
-              this.frapper(m, c.degats, c.recul, this.attaque.bas, this.joueur.x);
+              this.frapper(m, c.degats + (PARTIE.elastique[this.attaque.type] ? 1 : 0),
+                c.recul, this.attaque.bas, this.joueur.x, false, this.attaque.type);
             }
           }
           for (const k of this.caisses){
@@ -678,11 +697,11 @@ class Combat extends Phaser.Scene {
           SON.jouer('charge');
         } else {
           let v;
-          if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse;
+          if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse * this.D.vitesse;
           else {
             if (m.go.x < m.minX) m.dir = 1;
             if (m.go.x > m.maxX) m.dir = -1;
-            v = m.dir * m.def.patrouille;
+            v = m.dir * m.def.patrouille * this.D.vitesse;
           }
           if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
           m.go.body.setVelocityX(v);

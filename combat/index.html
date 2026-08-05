@@ -94,6 +94,13 @@
     animation:halo 1.7s ease-in-out infinite;
   }
   .aide{margin-top:18px;font-size:9px;letter-spacing:.18em;color:#6a76a4}
+  .choix-diff{margin-top:14px;display:flex;gap:8px}
+  .choix-diff button{
+    font-family:'Arcade',ui-monospace,monospace;font-size:8px;letter-spacing:.05em;
+    color:#6a76a4;background:rgba(27,35,64,.5);border:1px solid #33406e;border-radius:999px;
+    padding:9px 13px;cursor:pointer;
+  }
+  .choix-diff button.choisi{color:#0d1120;background:#ffd166;border-color:#ffd166}
   .record{margin-top:8px;font-size:10px;letter-spacing:.2em;color:#ffd98a;min-height:13px}
   /* discret, mais toujours lisible : c'est ce qu'on se dit au téléphone
      pour vérifier qu'on parle bien de la même version */
@@ -190,6 +197,8 @@
     .jeu{margin-top:6px}
     .glyphes{margin-top:12px;font-size:15px}
     .aide{margin-top:10px}
+    .choix-diff{margin-top:8px}
+    .choix-diff button{padding:7px 10px}
     .record{margin-top:5px}
     .demarrer{margin-top:12px;padding:11px 20px}
   }
@@ -205,6 +214,9 @@
   <div class="jeu">COMBAT</div>
   <div class="glyphes"><i class="g1">△</i><i class="g2">□</i><i class="g3">○</i><i class="g4">✕</i></div>
   <div class="aide">↑ UPPERCUT &nbsp;·&nbsp; ↓ RAMPER &nbsp;·&nbsp; ✕ SAUTER</div>
+  <div class="choix-diff" id="choixDiff">
+    <button data-d="facile">FACILE</button><button data-d="moyen">MOYEN</button><button data-d="difficile">DIFFICILE</button>
+  </div>
   <div class="record" id="record"></div>
   <button class="demarrer" id="demarrer">APPUIE POUR<br>COMMENCER</button>
   <div class="version" id="version"></div>
@@ -246,7 +258,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '12';
+const VERSION = '13';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -301,7 +313,9 @@ const CFG = {
   viesMax:       5,     // les vies en cadeau des boss ne s'empilent pas au-delà
   rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
   segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
-  segmentsMax:   5,     // réserve maximale de segments de rechange  // proportion de monstres vaincus qui lâchent un cœur
+  segmentsMax:   5,     // réserve maximale de segments de rechange
+  maitrisePour:  3,     // monstres à vaincre d'un même coup pour le débloquer en élastique
+  porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
@@ -351,6 +365,14 @@ const MONSTRES = {
               canon:{ portee:540, visee:0.5, repos:1.1, vitesse:520 } },
   broyeur:  { pv:18, taille:[50,58], vitesse: 92, patrouille:44, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
               nom:'LE BROYEUR',              couleur:0xb03a3a, ombre:0x762222 },
+  grandBaveux:{ pv:10, taille:[44,50], vitesse: 70, patrouille:36, degats:1, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+              nom:'LE GRAND BAVEUX',         couleur:0x8f5fae, ombre:0x5d3a78 },
+  scorpion: { pv:12, taille:[34,44], vitesse:135, patrouille:70, degats:1, vol:0, faible:null, silhouette:'gardien', boss:true,
+              nom:'LE SCORPION DES SABLES',  couleur:0xc2913a, ombre:0x8a6220,
+              charge:{ portee:250, preparation:0.40, elan:480, repos:1.6 } },
+  sentinelle:{ pv:12, taille:[36,32], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
+              nom:'LA SENTINELLE',           couleur:0x5a7fa8, ombre:0x39536f,
+              canon:{ portee:480, visee:0.6, repos:1.5, vitesse:470 } },
   patron:   { pv:26, taille:[58,66], vitesse: 82, patrouille:40, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true, final:true,
               nom:'LE PATRON',               couleur:0x9b2f2f, ombre:0x631d1d },
 };
@@ -375,32 +397,60 @@ const COUL = {
   poussiere:0x6b7399,
   tirEnnemi:0xff6b5e,
 };
+// ─────────────────────────────────────────────────────────────
+// DIFFICULTÉ — choisie sur l'écran-titre, gardée en localStorage
+// ─────────────────────────────────────────────────────────────
+const DIFFICULTES = {
+  facile:    { nom:'FACILE',    monstres:0.7, pv:0.7,  vitesse:0.9,  vies:4 },
+  moyen:     { nom:'MOYEN',     monstres:1.0, pv:1.0,  vitesse:1.0,  vies:3 },
+  difficile: { nom:'DIFFICILE', monstres:1.5, pv:1.35, vitesse:1.15, vies:3 },
+};
+let DIFFICULTE_CHOISIE = 'moyen';
+try {
+  const d = localStorage.getItem('mgc-difficulte');
+  if (DIFFICULTES[d]) DIFFICULTE_CHOISIE = d;
+} catch (e) {}
+
+const NOMS_ELASTIQUES = {
+  poing:'POING ÉLASTIQUE', pied:'PIED ÉLASTIQUE',
+  retourne:'RETOURNÉ ÉLASTIQUE', crochet:'UPPERCUT ÉLASTIQUE',
+};
+
 const HANCHE = -19, EPAULE = -30, TETE = -35;
 
 // ═══════════════ src/niveaux.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // LES ÉTAGES
-// On part de la rue, on entre dans l'immeuble, et on monte jusqu'au toit.
+// On part de la forêt au petit matin, on traverse le désert puis la
+// ville de jour ; la nuit tombe sur la rue, et on monte la tour
+// jusqu'au toit. Chaque niveau a sa teinte : on doit reconnaître où
+// on est d'un coup d'œil, sans lire le bandeau.
 // ─────────────────────────────────────────────────────────────
-// Chaque étage a sa propre teinte : on doit reconnaître où on est d'un
-// coup d'œil, sans lire le bandeau. Le hall est un marbre bleu et froid,
-// les bureaux sont ambrés, la machinerie rouille, le toit vire au violet.
 const NIVEAUX = [
-  { nom:'LA RUE',        sous:'rejoins la tour',        decor:'exterieur', largeur:7000, sortie:'porte',
+  { nom:'LA FORÊT', sous:'au petit matin', decor:'foret', largeur:5200, sortie:'arche',
+    peuple:['baveux','baveux','colosse'], boss:'grandBaveux',
+    teinte:{ sol:0x2a3d24, solBord:0x86b25e, plat:0x33502a, platBord:0xa5d47c } },
+  { nom:'LE DÉSERT', sous:'plein soleil', decor:'desert', largeur:5600, sortie:'arche',
+    peuple:['baveux','gardien','colosse'], boss:'scorpion',
+    teinte:{ sol:0xa07a44, solBord:0xe8c37b, plat:0x8a6538, platBord:0xf0d79a } },
+  { nom:'LA VILLE DE JOUR', sous:'traverse-la', decor:'villeJour', largeur:5800, sortie:'porte',
+    peuple:['drone','gardien','baveux'], boss:'sentinelle',
+    teinte:{ sol:0x565d6e, solBord:0xb9c2d4, plat:0x49505f, platBord:0xcfd8e8 } },
+  { nom:'LA RUE', sous:'la nuit tombe — rejoins la tour', decor:'exterieur', largeur:7000, sortie:'porte',
     peuple:['baveux','baveux','drone','colosse'], boss:'cogneur' },
-  { nom:'LE HALL',       sous:'1ᵉʳ étage',              decor:'interieur', largeur:3400, sortie:'ascenseur',
+  { nom:'LE HALL', sous:'1ᵉʳ étage', decor:'interieur', largeur:3400, sortie:'ascenseur',
     peuple:['gardien','gardien','colosse','baveux'], boss:'chefSecu',
     teinte:{ fondHaut:0x14202e, fondBas:0x081019, mur:0x1b2f42, murHaut:0x27455f, plafond:0x081119,
              neon:0xcdeeff, sol:0x142230, solBord:0x6fb3d6, plat:0x1d3b4e, platBord:0x8fd8f2 } },
-  { nom:'LES BUREAUX',   sous:'14ᵉ étage',              decor:'interieur', largeur:3800, sortie:'ascenseur',
+  { nom:'LES BUREAUX', sous:'14ᵉ étage', decor:'interieur', largeur:3800, sortie:'ascenseur',
     peuple:['gardien','tourelle','drone','gardien'], boss:'canonnier',
     teinte:{ fondHaut:0x241d14, fondBas:0x120d08, mur:0x35281a, murHaut:0x4a3823, plafond:0x140f09,
              neon:0xffe0a8, sol:0x261d12, solBord:0xd8a45c, plat:0x3c2d1c, platBord:0xf0c780 } },
-  { nom:'LA MACHINERIE', sous:'37ᵉ étage',              decor:'interieur', largeur:4000, sortie:'echelle',
+  { nom:'LA MACHINERIE', sous:'37ᵉ étage', decor:'interieur', largeur:4000, sortie:'echelle',
     peuple:['tourelle','tourelle','colosse','drone','gardien'], boss:'broyeur',
     teinte:{ fondHaut:0x2a1618, fondBas:0x130a0b, mur:0x3a1e1f, murHaut:0x542b2b, plafond:0x150b0c,
              neon:0xff9d8a, sol:0x2b1718, solBord:0xd4736a, plat:0x402323, platBord:0xf09a8c } },
-  { nom:'LE TOIT',       sous:'tout en haut',           decor:'toit',      largeur:3000, sortie:'patron',
+  { nom:'LE TOIT', sous:'tout en haut', decor:'toit', largeur:3000, sortie:'patron',
     peuple:['drone','drone','gardien'], boss:'patron' },
 ];
 
@@ -421,7 +471,12 @@ function generateur(s){
 // puisque changer d'étage relance la scène.
 let PARTIE = null;
 function nouvellePartieEtat(){
-  return { niveau:0, pv:CFG.pvJoueur, vies:CFG.viesDepart, arme:null, munitions:0, segments:0, vaincus:0, morts:0 };
+  const D = DIFFICULTES[DIFFICULTE_CHOISIE] || DIFFICULTES.moyen;
+  return { niveau:0, pv:CFG.pvJoueur, vies:D.vies, difficulte:DIFFICULTE_CHOISIE,
+           arme:null, munitions:0, segments:0, vaincus:0, morts:0,
+           // vaincre 3 monstres d'un même coup le débloque en élastique
+           maitrise:{ poing:0, pied:0, retourne:0, crochet:0 },
+           elastique:{ poing:false, pied:false, retourne:false, crochet:false } };
 }
 PARTIE = nouvellePartieEtat();
 
@@ -514,6 +569,7 @@ const SON = {
       case 'gagne':    [523,659,784,1047].forEach((f,i) => this.note('square', f, f, 0.2, 0.2, i*0.11)); break;
       case 'vide':     this.note('square', 160, 120, 0.06, 0.12); break;
       case 'ejecte':   this.note('square', 1100, 700, 0.07, 0.18); this.souffle(0.14, 0.32, 900, 1.2); break;
+      case 'competence':[523,784,1047,1568].forEach((f,i) => this.note('square', f, f, 0.13, 0.2, i*0.07)); break;
       case 'unevie':   [392,523,659,784,1047].forEach((f,i) => this.note('triangle', f, f, 0.16, 0.22, i*0.07)); break;
       case 'recharge': this.note('square', 500, 500, 0.05, 0.16); this.note('square', 950, 950, 0.06, 0.2, 0.08); break;
       case 'visee':    this.note('square', 900, 1500, 0.5, 0.09); break;
@@ -681,6 +737,7 @@ class Combat extends Phaser.Scene {
 
   create(){
     this.def = NIVEAUX[Math.min(PARTIE.niveau, NIVEAUX.length - 1)];
+    this.D = DIFFICULTES[PARTIE.difficulte] || DIFFICULTES.moyen;
     this.largeur = this.def.largeur;
     // graine dérivée de l'étage : chaque étage a sa propre disposition,
     // et mourir ne la redessine pas
@@ -740,17 +797,17 @@ class Combat extends Phaser.Scene {
 
     this.hud = this.add.graphics().setScrollFactor(0).setDepth(10);
     this.hudTexte = this.add.text(22, 60, '',
-      { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'12px', color:'#8d9ac4' })
-      .setScrollFactor(0).setDepth(10);
+      { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'12px', color:'#aeb9dd' })
+      .setStroke('#0d1120', 3).setScrollFactor(0).setDepth(10);
     this.hudMsg = this.add.text(L/2, 96, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'13px', color:'#ffd98a' })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
+      .setStroke('#0d1120', 4).setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
     this.hudBoss = this.add.text(L/2, H - 48, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'11px', color:'#ffb0a8' })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
+      .setStroke('#0d1120', 3).setOrigin(0.5).setScrollFactor(0).setDepth(11).setAlpha(0);
     this.hudFin = this.add.text(L/2, H/2 - 30, '',
       { fontFamily:'ui-monospace, Menlo, monospace', fontSize:'18px', color:'#cbd5f0', align:'center' })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(11);
+      .setStroke('#0d1120', 5).setOrigin(0.5).setScrollFactor(0).setDepth(11);
 
     this.message(this.def.nom + '  —  ' + this.def.sous);
   }
@@ -766,6 +823,7 @@ class Combat extends Phaser.Scene {
     const t = this.def.teinte;
     if (this.def.decor === 'interieur') return t ? [t.sol, t.solBord] : [COUL.solDedans, COUL.solBordDedans];
     if (this.def.decor === 'toit')      return [COUL.solToit, COUL.solBordToit];
+    if (t) return [t.sol, t.solBord];   // forêt, désert, ville de jour
     const u = this.urbain(x);
     return [this.melange(COUL.sol, COUL.solVille, u), this.melange(COUL.solBord, COUL.solBordVille, u)];
   }
@@ -812,8 +870,9 @@ class Combat extends Phaser.Scene {
       this.physics.add.collider(go, this.plateformes);
       this.physics.add.collider(go, this.grCaisses);
     }
+    const pv = Math.max(1, Math.round(d.pv * this.D.pv));
     const m = {
-      go, type, def:d, pv:d.pv, pvMax:d.pv, assomme:0, flash:0, blinde:0,
+      go, type, def:d, pv, pvMax:pv, assomme:0, flash:0, blinde:0,
       dir:-1, minX, maxX, baseY:y, phase:this.alea()*6,
       prepare:0, repos:0, vise:0,
     };
@@ -848,7 +907,9 @@ class Combat extends Phaser.Scene {
       this.creerSol(x, long);
       if (this.alea() < (dedans ? 0.6 : 0.4))
         this.creerPlateforme(x + long*0.35, SOL_Y - 100 - this.alea()*40, 110 + this.alea()*80);
-      const nb = 1 + (this.alea() < 0.45 ? 1 : 0);
+      let nb = 1 + (this.alea() < 0.45 ? 1 : 0);
+      if (this.D.monstres > 1 && this.alea() < this.D.monstres - 1) nb++;
+      if (this.D.monstres < 1 && this.alea() > this.D.monstres && nb > 1) nb--;
       for (let i = 0; i < nb; i++){
         const mx = x + 80 + this.alea()*(long - 160);
         this.creerMonstre(this.tirerType(mx), mx, x + 30, x + long - 30);
@@ -933,11 +994,12 @@ class Combat extends Phaser.Scene {
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
     if (!c.portee) return [];
+    const portee = c.portee * (PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1);
     const dirs = c.bilateral ? [1, -1] : [this.sens];
     const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
     return dirs.map(d => {
-      const cx = this.joueur.x + d * (14 + c.portee/2);
-      return new Phaser.Geom.Rectangle(cx - c.portee/2, y - c.hauteur/2, c.portee, c.hauteur);
+      const cx = this.joueur.x + d * (14 + portee/2);
+      return new Phaser.Geom.Rectangle(cx - portee/2, y - c.hauteur/2, portee, c.hauteur);
     });
   }
   vulnerable(m, bas){
@@ -945,7 +1007,7 @@ class Combat extends Phaser.Scene {
     if (m.def.faible === 'haut') return !bas;
     return true;
   }
-  frapper(m, degats, recul, bas, sourceX, ecrase){
+  frapper(m, degats, recul, bas, sourceX, ecrase, origine){
     // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
     // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
     if (!ecrase && !this.vulnerable(m, bas)){
@@ -978,11 +1040,23 @@ class Combat extends Phaser.Scene {
       // les deux cadeaux ne se confondent pas
       if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
       m.go.destroy();
+      this.progresser(origine);
       if (m.def.boss){
         this.bossVivant = false;
         if (m.def.final) this.gagnerPartie();
         else this.message(m.def.nom + ' EST À TERRE  —  LA SORTIE S\'OUVRE');
       }
+    }
+  }
+  // trois victoires avec le même coup : il devient élastique — portée
+  // accrue de 65 % et un dégât de plus
+  progresser(origine){
+    if (!origine || !(origine in PARTIE.maitrise) || PARTIE.elastique[origine]) return;
+    PARTIE.maitrise[origine]++;
+    if (PARTIE.maitrise[origine] >= CFG.maitrisePour){
+      PARTIE.elastique[origine] = true;
+      SON.jouer('competence');
+      this.message('✨ ' + NOMS_ELASTIQUES[origine] + ' DÉBLOQUÉ');
     }
   }
   casser(k, degats){
@@ -1226,7 +1300,8 @@ class Combat extends Phaser.Scene {
             if (m.mort || this.attaque.touches.has(m)) continue;
             if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, m.go.getBounds()))){
               this.attaque.touches.add(m);
-              this.frapper(m, c.degats, c.recul, this.attaque.bas, this.joueur.x);
+              this.frapper(m, c.degats + (PARTIE.elastique[this.attaque.type] ? 1 : 0),
+                c.recul, this.attaque.bas, this.joueur.x, false, this.attaque.type);
             }
           }
           for (const k of this.caisses){
@@ -1353,11 +1428,11 @@ class Combat extends Phaser.Scene {
           SON.jouer('charge');
         } else {
           let v;
-          if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse;
+          if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse * this.D.vitesse;
           else {
             if (m.go.x < m.minX) m.dir = 1;
             if (m.go.x > m.maxX) m.dir = -1;
-            v = m.dir * m.def.patrouille;
+            v = m.dir * m.def.patrouille * this.D.vitesse;
           }
           if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
           m.go.body.setVelocityX(v);
@@ -1477,6 +1552,9 @@ Object.assign(Combat.prototype, {
     const sx = this.cameras.main.scrollX;
     if (this.def.decor === 'interieur') this.dessinerInterieur(sx);
     else if (this.def.decor === 'toit') this.dessinerToit(sx);
+    else if (this.def.decor === 'foret') this.dessinerForet(sx);
+    else if (this.def.decor === 'desert') this.dessinerDesert(sx);
+    else if (this.def.decor === 'villeJour') this.dessinerVilleJour(sx);
     else this.dessinerDehors(sx);
     this.dessinerSortie();
     this.dessinerCaisses();
@@ -1616,6 +1694,76 @@ Object.assign(Combat.prototype, {
       g.fillStyle(t.neon, 0.9);  g.fillRect(x, 36, 84, 6);
     }
   },
+  dessinerForet(sx){
+    // petit matin : ciel laiteux, soleil bas, trois rangées de sapins
+    // du plus pâle (loin) au plus sombre (près)
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0xa8d8d0, 0xa8d8d0, 0xe8f0d8, 0xe8f0d8, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    g.fillStyle(0xfff2c0, 0.18); g.fillCircle(190, 92, 80);
+    g.fillStyle(0xfff2c0, 0.55); g.fillCircle(190, 92, 44);
+    this.sapins(g, sx*0.15, 0x9bbf8e, 306, 62, 92);
+    this.sapins(g, sx*0.32, 0x6fa06b, 340, 88, 122);
+    this.sapins(g, sx*0.55, 0x497a52, 378, 118, 152);
+  },
+  sapins(g, off, couleur, base, h, pas){
+    const debut = Math.floor(off/pas) - 1;
+    g.fillStyle(couleur, 1);
+    for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+      const x = i*pas - off + (i % 3) * 14;
+      const hh = h * (0.75 + Math.abs(Math.sin(i*12.99)) * 0.5);
+      g.fillTriangle(x - hh*0.42, base, x + hh*0.42, base, x, base - hh);
+      g.fillTriangle(x - hh*0.34, base - hh*0.34, x + hh*0.34, base - hh*0.34, x, base - hh*1.28);
+    }
+  },
+  dessinerDesert(sx){
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0x8fd0e8, 0x8fd0e8, 0xf2dfae, 0xf2dfae, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    g.fillStyle(0xfff6d0, 0.35); g.fillCircle(700, 86, 62);
+    g.fillStyle(0xffffff, 0.9);  g.fillCircle(700, 86, 34);
+    this.collines(g, sx*0.2, 0xe3c078, 26, 300, 1);
+    this.collines(g, sx*0.45, 0xcda45c, 20, 340, 1);
+    // cactus à bras, plantés au premier plan
+    const pas = 260, debut = Math.floor(sx*0.6/pas) - 1;
+    g.fillStyle(0x4f7d46, 1);
+    for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+      const x = i*pas - sx*0.6 + (i % 2) * 40;
+      const h = 34 + Math.abs(Math.sin(i*7.7)) * 30;
+      g.fillRect(x-5, SOL_Y - h, 10, h);
+      g.fillRect(x-16, SOL_Y - h*0.62, 12, 6);
+      g.fillRect(x-16, SOL_Y - h*0.62 - 12, 6, 16);
+      g.fillRect(x+5,  SOL_Y - h*0.45, 12, 6);
+      g.fillRect(x+11, SOL_Y - h*0.45 - 10, 6, 14);
+    }
+  },
+  dessinerVilleJour(sx){
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0x9fd3ef, 0x9fd3ef, 0xdcedf7, 0xdcedf7, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    const pasN = 300, dN = Math.floor(sx*0.08/pasN) - 1;
+    g.fillStyle(0xffffff, 0.8);
+    for (let i = dN; i < dN + Math.ceil(L/pasN) + 3; i++){
+      const x = i*pasN - sx*0.08, y = 58 + (i % 3) * 34;
+      g.fillEllipse(x, y, 90, 22); g.fillEllipse(x+34, y-8, 60, 18);
+    }
+    this.batimentsClairs(g, sx*0.3, 0xb9c8d8, 0x8fa2b8, 150, 60, 130);
+    this.batimentsClairs(g, sx*0.55, 0x94a8bc, 0x6d8098, 120, 100, 170);
+  },
+  batimentsClairs(g, off, corps, ombre, pas, hMin, hVar){
+    const debut = Math.floor(off/pas) - 1;
+    for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+      const h = hMin + Math.abs(Math.sin(i*7.13)) * hVar;
+      const w = 58 + Math.abs(Math.cos(i*3.71)) * 40;
+      const x = i*pas - off, y = SOL_Y - h;
+      g.fillStyle(corps, 1); g.fillRect(x, y, w, h);
+      g.fillStyle(ombre, 1); g.fillRect(x, y, w, 5);
+      g.fillStyle(0x3c4b5c, 0.75);
+      for (let fy = y + 12; fy < SOL_Y - 14; fy += 20)
+        for (let fx = x + 8; fx < x + w - 11; fx += 17)
+          g.fillRect(fx, fy, 7, 9);
+    }
+  },
   dessinerToit(sx){
     const g = this.fond; g.clear();
     g.fillGradientStyle(0x06080f, 0x06080f, 0x2c1743, 0x2c1743, 1);
@@ -1689,8 +1837,7 @@ Object.assign(Combat.prototype, {
         g.beginPath(); g.moveTo(x - 14, y); g.lineTo(x + 14, y); g.strokePath();
       }
       g.fillStyle(0x4dd6c1, 0.3 + 0.3*pulse); g.fillTriangle(x, sol - 216, x - 13, sol - 200, x + 13, sol - 200);
-      return;
-    }
+    } else
     if (this.def.sortie === 'porte'){
       // l'entrée de la tour : un bloc sombre percé d'une porte éclairée
       g.fillStyle(0x120f22, 1); g.fillRect(x - 90, sol - 300, 180, 300);
@@ -1705,24 +1852,35 @@ Object.assign(Combat.prototype, {
       g.fillStyle(0x090c16, 1); g.fillRect(x - 34, sol - 96, 68, 96);
       g.fillStyle(0xffd98a, 0.35 + 0.35*pulse); g.fillRect(x - 34, sol - 96, 68, 6);
       g.lineStyle(3, COUL.ceinture, 0.8); g.strokeRect(x - 34, sol - 96, 68, 96);
-      return;
-    }
-    // ascenseur
-    g.fillStyle(0x0d1120, 1);  g.fillRect(x - 44, sol - 132, 88, 132);
+    } else if (this.def.sortie === 'arche'){
+      // arche de pierre : la sortie des niveaux de plein air
+      g.fillStyle(0x000000, 0.18); g.fillEllipse(x, sol, 96, 10);
+      g.fillStyle(0x5d5040, 1); g.fillRect(x - 46, sol - 120, 18, 120);
+      g.fillStyle(0x5d5040, 1); g.fillRect(x + 28, sol - 120, 18, 120);
+      g.fillStyle(0x7a6a52, 1); g.fillRect(x - 42, sol - 116, 12, 116);
+      g.fillStyle(0x7a6a52, 1); g.fillRect(x + 30, sol - 116, 12, 116);
+      g.fillStyle(0x5d5040, 1); g.fillRect(x - 54, sol - 138, 108, 24);
+      g.fillStyle(0x7a6a52, 1); g.fillRect(x - 50, sol - 134, 100, 14);
+      g.fillStyle(0xffd98a, 0.10 + 0.25*pulse); g.fillRect(x - 28, sol - 114, 56, 114);
+      g.fillStyle(0x4dd6c1, 0.35 + 0.5*pulse);
+      g.fillTriangle(x, sol - 156, x - 13, sol - 141, x + 13, sol - 141);
+    } else {
+      g.fillStyle(0x0d1120, 1);  g.fillRect(x - 44, sol - 132, 88, 132);
     g.fillStyle(0x2a3152, 1);  g.fillRect(x - 40, sol - 126, 80, 126);
     g.fillStyle(0x141a30, 1);  g.fillRect(x - 34, sol - 118, 68, 118);
     g.lineStyle(3, 0x7f8cc4, 1); g.strokeRect(x - 40, sol - 126, 80, 126);
     g.lineStyle(2, 0x7f8cc4, 0.8);
     g.beginPath(); g.moveTo(x, sol - 118); g.lineTo(x, sol); g.strokePath();
     // flèche qui monte
-    g.fillStyle(bloquee ? 0xe2584d : 0x4dd6c1, bloquee ? 0.5 : 0.35 + 0.5*pulse);
-    g.fillTriangle(x, sol - 150, x - 14, sol - 134, x + 14, sol - 134);
-    g.fillStyle(bloquee ? 0xe2584d : 0xffd98a, 0.25 + 0.35*pulse); g.fillRect(x - 40, sol - 138, 80, 5);
+      g.fillStyle(bloquee ? 0xe2584d : 0x4dd6c1, bloquee ? 0.5 : 0.35 + 0.5*pulse);
+      g.fillTriangle(x, sol - 150, x - 14, sol - 134, x + 14, sol - 134);
+      g.fillStyle(bloquee ? 0xe2584d : 0xffd98a, 0.25 + 0.35*pulse); g.fillRect(x - 40, sol - 138, 80, 5);
+    }
+    // sortie condamnée tant que le boss tient : la croix vaut pour toutes
     if (bloquee){
-      // deux barres en croix : la sortie est visiblement condamnée
       g.lineStyle(5, 0xe2584d, 0.75);
-      g.beginPath(); g.moveTo(x - 34, sol - 110); g.lineTo(x + 34, sol - 14); g.strokePath();
-      g.beginPath(); g.moveTo(x + 34, sol - 110); g.lineTo(x - 34, sol - 14); g.strokePath();
+      g.beginPath(); g.moveTo(x - 34, sol - 112); g.lineTo(x + 34, sol - 16); g.strokePath();
+      g.beginPath(); g.moveTo(x + 34, sol - 112); g.lineTo(x - 34, sol - 16); g.strokePath();
     }
   },
 
@@ -1886,6 +2044,7 @@ Object.assign(Combat.prototype, {
     const t = this.phase;
     const marche = Math.abs(b.velocity.x) > 20;
     let pieds, mains, inclinaison = -0.03;
+    let etB = 1, etJ = 1;   // étirement élastique du bras et de la jambe qui frappent
     const allure = Math.min(1, Math.abs(b.velocity.x) / CFG.vitesseCourse);
     const rampe = this.accroupi && marche;
     let tasse = this.accroupi ? (rampe ? 13 : 9) : 0;
@@ -1897,18 +2056,22 @@ Object.assign(Combat.prototype, {
       const c = COUPS[this.attaque.type];
       const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
       const ext = Math.sin(Math.PI * Math.min(1, p * 1.2));
+      const ela = PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1;
       if (this.attaque.type === 'poing'){
-        mains = [[-6 - ext*3, EPAULE + 9], [4 + ext*22, EPAULE + 2 - ext*3]];
+        etB = ela;
+        mains = [[-6 - ext*3, EPAULE + 9], [(4 + ext*22) * ela, EPAULE + 2 - ext*3]];
         pieds = [[-9 - ext*2, 0], [7 + ext*2, 0]];
         inclinaison = -0.05 - ext*0.06;
       } else if (this.attaque.type === 'pied'){
         mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
-        pieds = [[-6, 0], [6 + ext*26, -6 - ext*14]];
+        etJ = ela;
+        pieds = [[-6, 0], [(6 + ext*26) * ela, -6 - ext*14]];
         inclinaison = 0.04 + ext*0.12;
       } else if (this.attaque.type === 'crochet'){
         // le bras ne peut pas dépasser le sommet du crâne, sa longueur
         // l'en empêche : c'est le corps qui se soulève avec le coup
-        mains = [[-7 + ext*2, EPAULE + 12], [5 + ext*3, EPAULE - 4 - ext*22]];
+        etB = ela;
+        mains = [[-7 + ext*2, EPAULE + 12], [5 + ext*3, EPAULE - 4 - ext*22*ela]];
         pieds = [[-8, 0], [7, -ext*3]];
         inclinaison = 0.02 - ext*0.10;
         tasse -= ext * 4;
@@ -1919,7 +2082,8 @@ Object.assign(Combat.prototype, {
       } else {
         const balai = -1 + 2*p;
         mains = [[-12*balai, EPAULE + 4], [12*balai, EPAULE + 6]];
-        pieds = [[-4, 0], [balai*30, -14 - Math.sin(Math.PI*p)*8]];
+        etJ = ela;
+        pieds = [[-4, 0], [balai*30*ela, -14 - Math.sin(Math.PI*p)*8]];
         inclinaison = -0.10 + p*0.20;
       }
     } else if (!auSol){
@@ -1987,9 +2151,9 @@ Object.assign(Combat.prototype, {
     g.fillRect(-7, HA-3, 14, 4);
     g.fillRect(-7.5, HA-3, 3, 8);
 
-    this.membre(g, 1, HA, pieds[1][0], pieds[1][1], 9.5, 9.5, -1, COUL.gi, COUL.gi, 9, 7.5);
+    this.membre(g, 1, HA, pieds[1][0], pieds[1][1], 9.5*etJ, 9.5*etJ, -1, COUL.gi, COUL.gi, 9, 7.5);
     g.fillStyle(COUL.botte, 1); g.fillEllipse(pieds[1][0]+1, pieds[1][1]-1.5, 11, 6.4);
-    this.membre(g, 1, EP, mains[1][0], my(1), 8, 8, 1, COUL.gi, COUL.peau, 7.5, 5.5);
+    this.membre(g, 1, EP, mains[1][0], my(1), 8*etB, 8*etB, 1, COUL.gi, COUL.peau, 7.5, 5.5);
     if (this.arme){
       const a = ARMES[this.arme];
       g.fillStyle(a.couleur, 1); g.fillCircle(mains[1][0], my(1), 4.4);
@@ -2077,6 +2241,24 @@ function retourAuTitre(){
   document.body.classList.remove('enjeu');
   afficherRecord();       // la partie perdue vient peut-être de le battre
 }
+
+// le choix de difficulté : sélectionne sans lancer la partie, et s'en
+// souvient d'une fois sur l'autre
+const choixDiff = document.getElementById('choixDiff');
+function majChoixDiff(){
+  for (const b of choixDiff.querySelectorAll('button'))
+    b.classList.toggle('choisi', b.dataset.d === DIFFICULTE_CHOISIE);
+}
+majChoixDiff();
+choixDiff.addEventListener('pointerdown', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();   // l'écran-titre lance la partie au moindre appui : pas ici
+  DIFFICULTE_CHOISIE = b.dataset.d;
+  try { localStorage.setItem('mgc-difficulte', DIFFICULTE_CHOISIE); } catch (err) {}
+  majChoixDiff();
+});
 
 if (typeof Phaser !== 'undefined'){
   document.getElementById('titre').addEventListener('pointerdown', e => {

@@ -24,7 +24,9 @@ const CFG = {
   viesMax:       5,     // les vies en cadeau des boss ne s'empilent pas au-delà
   rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
   segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
-  segmentsMax:   5,     // réserve maximale de segments de rechange  // proportion de monstres vaincus qui lâchent un cœur
+  segmentsMax:   5,     // réserve maximale de segments de rechange
+  maitrisePour:  3,     // monstres à vaincre d'un même coup pour le débloquer en élastique
+  porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
@@ -74,6 +76,14 @@ const MONSTRES = {
               canon:{ portee:540, visee:0.5, repos:1.1, vitesse:520 } },
   broyeur:  { pv:18, taille:[50,58], vitesse: 92, patrouille:44, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
               nom:'LE BROYEUR',              couleur:0xb03a3a, ombre:0x762222 },
+  grandBaveux:{ pv:10, taille:[44,50], vitesse: 70, patrouille:36, degats:1, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+              nom:'LE GRAND BAVEUX',         couleur:0x8f5fae, ombre:0x5d3a78 },
+  scorpion: { pv:12, taille:[34,44], vitesse:135, patrouille:70, degats:1, vol:0, faible:null, silhouette:'gardien', boss:true,
+              nom:'LE SCORPION DES SABLES',  couleur:0xc2913a, ombre:0x8a6220,
+              charge:{ portee:250, preparation:0.40, elan:480, repos:1.6 } },
+  sentinelle:{ pv:12, taille:[36,32], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
+              nom:'LA SENTINELLE',           couleur:0x5a7fa8, ombre:0x39536f,
+              canon:{ portee:480, visee:0.6, repos:1.5, vitesse:470 } },
   patron:   { pv:26, taille:[58,66], vitesse: 82, patrouille:40, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true, final:true,
               nom:'LE PATRON',               couleur:0x9b2f2f, ombre:0x631d1d },
 };
@@ -98,4 +108,23 @@ const COUL = {
   poussiere:0x6b7399,
   tirEnnemi:0xff6b5e,
 };
+// ─────────────────────────────────────────────────────────────
+// DIFFICULTÉ — choisie sur l'écran-titre, gardée en localStorage
+// ─────────────────────────────────────────────────────────────
+const DIFFICULTES = {
+  facile:    { nom:'FACILE',    monstres:0.7, pv:0.7,  vitesse:0.9,  vies:4 },
+  moyen:     { nom:'MOYEN',     monstres:1.0, pv:1.0,  vitesse:1.0,  vies:3 },
+  difficile: { nom:'DIFFICILE', monstres:1.5, pv:1.35, vitesse:1.15, vies:3 },
+};
+let DIFFICULTE_CHOISIE = 'moyen';
+try {
+  const d = localStorage.getItem('mgc-difficulte');
+  if (DIFFICULTES[d]) DIFFICULTE_CHOISIE = d;
+} catch (e) {}
+
+const NOMS_ELASTIQUES = {
+  poing:'POING ÉLASTIQUE', pied:'PIED ÉLASTIQUE',
+  retourne:'RETOURNÉ ÉLASTIQUE', crochet:'UPPERCUT ÉLASTIQUE',
+};
+
 const HANCHE = -19, EPAULE = -30, TETE = -35;
