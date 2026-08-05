@@ -33,6 +33,8 @@ class Aquad extends Phaser.Scene {
 
     this.gSol    = this.add.graphics().setDepth(-10);   // eau et terre, en coordonnées monde
     this.gSortie = this.add.graphics().setDepth(-4);
+    this.gVisee  = this.add.graphics().setDepth(-3);    // arc de visée et anneau de cible, au sol
+    this.cibleVisee = null;
     this.grObstacles = this.add.group();
 
     // ── l'entité joueur ──
@@ -160,9 +162,41 @@ class Aquad extends Phaser.Scene {
   }
 
   // ── combat ──────────────────────────────────────────────────
+  // la boîte AU SOL d'une entité : son corps réduit au facteur k. C'est
+  // sur elle que se jugent les contacts — elle colle à l'ombre dessinée.
+  boiteSol(go, k){
+    const b = go.getBounds();
+    const rx = b.width * (1 - k) / 2, ry = b.height * (1 - k) / 2;
+    return new Phaser.Geom.Rectangle(b.x + rx, b.y + ry, b.width * k, b.height * k);
+  }
+  // l'ennemi vivant le plus proche à portée ET dans le cône du regard :
+  // c'est lui que les coups aimantés iront chercher
+  chercherCible(j, portee, cone){
+    let cible = null, mieux = portee;
+    for (const m of this.monstres){
+      if (m.mort) continue;
+      const dx = m.go.x - j.go.x, dy = m.go.y - j.go.y;
+      const d = Math.hypot(dx, dy);
+      if (d >= mieux || d < 1) continue;
+      const ecart = Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - Math.atan2(j.fy, j.fx)));
+      if (ecart > cone) continue;
+      cible = m; mieux = d;
+    }
+    return cible;
+  }
+  aimanter(j, portee, cone){
+    const c = this.chercherCible(j, portee, cone);
+    if (!c) return;
+    const d = Math.hypot(c.go.x - j.go.x, c.go.y - j.go.y) || 1;
+    j.fx = (c.go.x - j.go.x) / d;
+    j.fy = (c.go.y - j.go.y) / d;
+  }
   lancerAttaque(j, type, elastique){
     if (j.attaque) return;
     const c = COUPS[type];
+    // aimantation : le coup pivote vers l'ennemi le plus proche du regard
+    if (c.portee && !c.faisceau) this.aimanter(j, CFG.aimantPortee, CFG.aimantCone);
+    else this.aimanter(j, CFG.aimantPorteeTir, CFG.aimantCone * 0.55);
     // la direction du coup est figée au départ : le faisceau et les
     // balles partent là où on regardait en appuyant
     j.attaque = { type, t:0, fx:j.fx, fy:j.fy,
@@ -461,6 +495,9 @@ class Aquad extends Phaser.Scene {
     this.majJoueur(j, dt);
     this.majMonstres(dt);
     this.majTirs(dt);
+    // l'anneau au sol dit qui serait touché si on frappait maintenant —
+    // la même recherche que l'aimantation, donc il dit toujours vrai
+    this.cibleVisee = this.chercherCible(j, CFG.aimantPortee, CFG.aimantCone);
     for (const k of this.caisses) k.flash = Math.max(0, k.flash - dt);
     this.caisses = this.caisses.filter(k => !k.casse);
     for (const o of this.objets){
@@ -624,6 +661,7 @@ class Aquad extends Phaser.Scene {
     const type = j.porte.type;
     j.porte = null;
     majBoutonAction(false);
+    this.aimanter(j, CFG.aimantPorteeTir, CFG.aimantCone * 0.55);
     SON.jouer('ejecte');
     this.crier(j.go.x, j.go.y - 44, CRIS.lancer, '#ffd166', 15);
     this.cameras.main.shake(70, 0.003);
@@ -688,7 +726,10 @@ class Aquad extends Phaser.Scene {
           m.go.body.setVelocity((m.cible.x - m.go.x)/cd * v, (m.cible.y - m.go.y)/cd * v);
         }
       }
-      if (Phaser.Geom.Intersects.RectangleToRectangle(j.go.getBounds(), m.go.getBounds()))
+      // le contact se juge sur les boîtes AU SOL, pas les corps dessinés :
+      // la hurtbox du héros pardonne les frôlements
+      if (Phaser.Geom.Intersects.RectangleToRectangle(
+            this.boiteSol(j.go, CFG.hurtbox), this.boiteSol(m.go, CFG.contactMonstre)))
         this.blesser(j, m.go.x, m.go.y, m.def.degats);
     }
   }
