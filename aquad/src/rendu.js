@@ -7,6 +7,9 @@
 Object.assign(Aquad.prototype, {
 
   dessinerTout(){
+    // le fantôme que suit la caméra colle à la projection du joueur
+    const jp = this.iso(this.joueurs[0].go.x, this.joueurs[0].go.y);
+    this.suiveur.setPosition(jp.x, jp.y);
     this.dessinerSol();
     this.dessinerSortie();
     this.dessinerVisee();
@@ -42,11 +45,23 @@ Object.assign(Aquad.prototype, {
     const vx = cam.scrollX - 40, vy = cam.scrollY - 40;
     const vl = L + 80, vh = H + 80;
     const t = this.def.teinte;
-    const visible = (x, y) => x > vx && x < vx + vl && y > vy && y < vy + vh;
+    // le culling se fait en coordonnées MONDE : on rétro-projette les
+    // quatre coins de l'écran et on prend leur boîte englobante
+    const c1 = this.isoInv(vx, vy), c2 = this.isoInv(vx + vl, vy),
+          c3 = this.isoInv(vx, vy + vh), c4 = this.isoInv(vx + vl, vy + vh);
+    const wx0 = Math.min(c1.x, c2.x, c3.x, c4.x), wx1 = Math.max(c1.x, c2.x, c3.x, c4.x);
+    const wy0 = Math.min(c1.y, c2.y, c3.y, c4.y), wy1 = Math.max(c1.y, c2.y, c3.y, c4.y);
+    const visible = (x, y) => x > wx0 && x < wx1 && y > wy0 && y < wy1;
 
-    // l'eau partout, en deux profondeurs
+    // l'eau profonde remplit l'écran (espace écran, hors projection)
     g.fillStyle(COUL.eauProfonde, 1); g.fillRect(vx, vy, vl, vh);
     const iX = this.ileX, iY = this.ileY, iL = this.ileL, iH = this.ileH;
+
+    // tout le reste du sol se dessine EN COORDONNÉES MONDE à travers la
+    // projection : écraser de moitié puis tourner de 45° EST le losange
+    g.save();
+    g.scaleCanvas(1, 0.5);
+    g.rotateCanvas(Math.PI / 4);
     g.fillStyle(COUL.eau, 1); g.fillRect(iX - 90, iY - 90, iL + 180, iH + 180);
 
     // vaguelettes d'écume qui respirent le long de la côte (des TRAITS :
@@ -121,11 +136,15 @@ Object.assign(Aquad.prototype, {
         g.fillStyle(COUL.galet, 1); g.fillEllipse(hx, hy, 6, 4);
       }
     }
+    g.restore();
   },
 
   // ── le ponton de sortie, à l'est ────────────────────────────
   dessinerSortie(){
     const g = this.gSortie; g.clear();
+    g.save();
+    g.scaleCanvas(1, 0.5);
+    g.rotateCanvas(Math.PI / 4);
     const x0 = this.ileX + this.ileL - 6, y = this.pontonY;
     const bloquee = this.bossVivant;
     const pulse = bloquee ? 0 : 0.55 + 0.45 * Math.sin(this.time.now / 260);
@@ -145,12 +164,16 @@ Object.assign(Aquad.prototype, {
       g.beginPath(); g.moveTo(x0 + 8, y - 40); g.lineTo(x0 + 196, y + 40); g.strokePath();
       g.beginPath(); g.moveTo(x0 + 196, y - 40); g.lineTo(x0 + 8, y + 40); g.strokePath();
     }
+    g.restore();
   },
 
   // ── la visée : ce que dirait un coup donné maintenant ───────
   dessinerVisee(){
     const g = this.gVisee; g.clear();
     if (this.etat !== 'jeu') return;
+    g.save();
+    g.scaleCanvas(1, 0.5);
+    g.rotateCanvas(Math.PI / 4);
     const j = this.joueurs[0];
     // l'arc au sol devant le héros : là où porterait le coup. Masqué
     // pendant une frappe — le cercle blanc de l'impact prend le relais.
@@ -171,26 +194,29 @@ Object.assign(Aquad.prototype, {
       g.fillStyle(0xffd166, pulse * 0.4);
       g.fillEllipse(c.go.x, c.go.y + bs.height/2, bs.width + 14, (bs.width + 14) * 0.42);
     }
+    g.restore();
   },
 
   // ── décors : dessinés une fois, animés doucement ────────────
+  // billboards : le PIED est projeté, le corps reste dessiné debout
   dessinerDecor(d){
     const g = d.g; g.clear();
+    const P = this.iso(d.x, d.y);
     if (d.type === 'rocher'){
-      g.fillStyle(0x000000, 0.18); g.fillEllipse(d.x + SOLEIL.x*1.5, d.y + 12 + SOLEIL.y*0.5, 48, 14);
-      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(d.x, d.y, 46, 34);
-      g.fillStyle(COUL.rocher, 1); g.fillEllipse(d.x - 4, d.y - 6, 36, 24);
-      g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(d.x - 10, d.y - 10, 14, 8);
+      g.fillStyle(0x000000, 0.18); g.fillEllipse(P.x + SOLEIL.x*1.5, P.y + 12 + SOLEIL.y*0.5, 48, 14);
+      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(P.x, P.y, 46, 34);
+      g.fillStyle(COUL.rocher, 1); g.fillEllipse(P.x - 4, P.y - 6, 36, 24);
+      g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(P.x - 10, P.y - 10, 14, 8);
       return;
     }
     // palmier : le pied au corps physique, la tête bien plus haut —
-    // c'est le tri par y qui fait passer derrière ou devant
+    // c'est le tri par profondeur projetée qui fait passer derrière/devant
     const bal = Math.sin(d.phase) * 3;
-    g.fillStyle(0x000000, 0.18); g.fillEllipse(d.x + SOLEIL.x*3, d.y + 8 + SOLEIL.y, 52, 12);
+    g.fillStyle(0x000000, 0.18); g.fillEllipse(P.x + SOLEIL.x*3, P.y + 8 + SOLEIL.y, 52, 12);
     g.lineStyle(9, COUL.tronc, 1);
-    g.beginPath(); g.moveTo(d.x, d.y + 4);
-    g.lineTo(d.x + 6 + bal * 0.4, d.y - 46); g.strokePath();
-    const tx = d.x + 7 + bal * 0.5, ty = d.y - 52;
+    g.beginPath(); g.moveTo(P.x, P.y + 4);
+    g.lineTo(P.x + 6 + bal * 0.4, P.y - 46); g.strokePath();
+    const tx = P.x + 7 + bal * 0.5, ty = P.y - 52;
     g.fillStyle(COUL.palme, 1);
     for (let a = 0; a < 6; a++){
       const ang = a * Math.PI / 3 + bal * 0.02;
@@ -211,8 +237,9 @@ Object.assign(Aquad.prototype, {
   dessinerPierres(){
     for (const p of this.pierres){
       const g = p.g; g.clear();
-      g.setDepth(p.go.y);
-      const x = p.go.x, y = p.go.y;
+      const P = this.iso(p.go.x, p.go.y);
+      g.setDepth(P.y);
+      const x = P.x, y = P.y;
       g.fillStyle(0x000000, 0.18); g.fillEllipse(x + SOLEIL.x, y + 7 + SOLEIL.y*0.5, 20, 6);
       g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(x, y, 18, 13);
       g.fillStyle(COUL.rocher, 1); g.fillEllipse(x - 2, y - 2, 14, 9);
@@ -223,8 +250,9 @@ Object.assign(Aquad.prototype, {
   dessinerCaisses(){
     for (const k of this.caisses){
       const g = k.g; g.clear();
-      g.setDepth(k.go.y);
-      const x = k.go.x, y = k.go.y, clair = k.flash > 0;
+      const P = this.iso(k.go.x, k.go.y);
+      g.setDepth(P.y);
+      const x = P.x, y = P.y, clair = k.flash > 0;
       g.fillStyle(0x000000, 0.2); g.fillEllipse(x + SOLEIL.x, y + 12 + SOLEIL.y*0.5, 34, 10);
       g.fillStyle(clair ? 0xffffff : COUL.bois, 1);      g.fillRect(x-15, y-16, 30, 28);
       g.fillStyle(clair ? 0xffffff : COUL.boisClair, 1); g.fillRect(x-11, y-12, 22, 20);
@@ -239,12 +267,13 @@ Object.assign(Aquad.prototype, {
     const j = this.joueurs[0];
     for (const m of this.monstres){
       const g = m.g; g.clear();
-      g.setDepth(m.go.y);
+      const P = this.iso(m.go.x, m.go.y);
+      g.setDepth(P.y);
       if (m.def.silhouette === 'drone') this.dessinerMeduse(g, m);
       else this.dessinerCrabe(g, m);
       if (m.pv < m.pvMax){
         const l = m.def.boss ? m.def.taille[0]*0.6 : 13;
-        const x = m.go.x, y = m.go.y - m.def.taille[1]/2 - 16;
+        const x = P.x, y = P.y - m.def.taille[1]/2 - 16;
         g.fillStyle(0x2a3355, 1); g.fillRect(x-l, y, l*2, 4);
         g.fillStyle(m.def.boss ? 0xff5e5e : 0xe2584d, 1); g.fillRect(x-l, y, l*2 * (m.pv/m.pvMax), 4);
       }
@@ -252,7 +281,8 @@ Object.assign(Aquad.prototype, {
   },
   dessinerCrabe(g, m){
     const e = m.def.taille[0] / 30;
-    const x = m.go.x, y = m.go.y;
+    const P = this.iso(m.go.x, m.go.y);
+    const x = P.x, y = P.y;
     const dandine = Math.sin(m.phase) * 2;
     const alerte = m.prepare > 0 && Math.floor(m.prepare * 14) % 2 === 0;
     const eclaire = m.flash > 0 ? 0xffffff : (alerte ? 0xffe9b0 : null);
@@ -269,8 +299,8 @@ Object.assign(Aquad.prototype, {
       }
     g.fillStyle(ombre, 1); g.fillEllipse(x, y + 2*e + dandine*0.4, 28*e, 18*e);
     g.fillStyle(corps, 1); g.fillEllipse(x, y - 2*e + dandine*0.4, 26*e, 18*e);
-    // pinces vers le joueur
-    const vers = Math.sign(this.joueurs[0].go.x - x) || 1;
+    // pinces vers le joueur (comparaison à l'écran : positions projetées)
+    const vers = Math.sign(this.iso(this.joueurs[0].go.x, this.joueurs[0].go.y).x - x) || 1;
     g.fillStyle(corps, 1);
     g.fillEllipse(x + vers*16*e, y - 6*e + dandine, 12*e, 9*e);
     g.fillEllipse(x - vers*14*e, y - 4*e - dandine, 9*e, 7*e);
@@ -281,10 +311,11 @@ Object.assign(Aquad.prototype, {
   },
   dessinerMeduse(g, m){
     const e = m.def.taille[0] / 26;
-    const x = m.go.x, y = m.go.y + Math.sin(m.phase) * 3;
+    const P = this.iso(m.go.x, m.go.y);
+    const x = P.x, y = P.y + Math.sin(m.phase) * 3;
     const eclaire = m.flash > 0 ? 0xffffff : null;
     const corps = eclaire || m.def.couleur;
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, m.go.y + 14*e + SOLEIL.y*0.5, 26*e, 8*e);
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, P.y + 14*e + SOLEIL.y*0.5, 26*e, 8*e);
     // tentacules qui ondulent dessous
     g.lineStyle(2.5*e, eclaire || m.def.ombre, 0.9);
     for (let i = -2; i <= 2; i++){
@@ -296,7 +327,7 @@ Object.assign(Aquad.prototype, {
     g.fillStyle(eclaire || m.def.ombre, 1); g.fillEllipse(x, y, 24*e, 18*e);
     g.fillStyle(corps, 0.92); g.fillEllipse(x, y - 3*e, 22*e, 14*e);
     g.fillStyle(0xffffff, 0.35); g.fillEllipse(x - 5*e, y - 6*e, 8*e, 5*e);
-    const vers = Math.sign(this.joueurs[0].go.x - x) || 1;
+    const vers = Math.sign(this.iso(this.joueurs[0].go.x, this.joueurs[0].go.y).x - x) || 1;
     g.fillStyle(m.def.oeil, 1);
     g.fillCircle(x + vers*2 - 4*e, y - 2*e, 2*e); g.fillCircle(x + vers*2 + 4*e, y - 2*e, 2*e);
   },
@@ -304,20 +335,22 @@ Object.assign(Aquad.prototype, {
   // ── le héros, repris de Combat en vue 3/4 ───────────────────
   dessinerPerso(j){
     const g = j.g; g.clear();
-    g.setDepth(j.go.y);
+    const PJ = this.iso(j.go.x, j.go.y);
+    g.setDepth(PJ.y);
     const b = j.go.body;
     const vitesse = Math.hypot(b.velocity.x, b.velocity.y);
     const marche = vitesse > 20;
     const allure = Math.min(1, vitesse / CFG.vitesse);
     const t = j.phase;
-    // la direction DESSINÉE : le dos quand il monte, la face quand il
-    // descend, le profil sur les côtés — c'est elle qui donne le volume.
-    // Pendant un coup, c'est la direction du coup qui commande.
+    // la direction DESSINÉE se juge À L'ÉCRAN : on projette le regard
+    // (ou le coup) — dos quand il monte à l'écran, face quand il descend,
+    // profil sur les côtés.
     const dfx = j.attaque ? j.attaque.fx : j.fx;
     const dfy = j.attaque ? j.attaque.fy : j.fy;
+    const sfx = (dfx - dfy) * ISO_C, sfy = (dfx + dfy) * ISO_S;
     const vue = j.attaque ? 'profil'
-      : (Math.abs(dfy) > Math.abs(dfx) ? (dfy < 0 ? 'dos' : 'face') : 'profil');
-    const sens = (vue === 'profil' && dfx < -0.05) ? -1 : 1;
+      : (Math.abs(sfy) * 2 > Math.abs(sfx) ? (sfy < 0 ? 'dos' : 'face') : 'profil');
+    const sens = (vue === 'profil' && sfx < -0.05) ? -1 : 1;
     let pieds, mains, inclinaison = 0;
 
     if (j.porte){
@@ -382,8 +415,9 @@ Object.assign(Aquad.prototype, {
     const lev = (marche && !j.attaque) ? Math.abs(Math.sin(t)) * 2 : 0;
     g.save();
     g.translateCanvas(0, -lev);
-    // pendant un coup, tout le corps se fend vers la direction du coup
-    if (j.attaque) g.rotateCanvas(sens === 1 ? Math.atan2(dfy, dfx) : Math.atan2(dfy, -dfx));
+    // pendant un coup, tout le corps se fend vers la direction du coup,
+    // telle qu'elle se voit à l'écran
+    if (j.attaque) g.rotateCanvas(sens === 1 ? Math.atan2(sfy, sfx) : Math.atan2(sfy, -sfx));
 
     this.membre(g, -1, EPAULE, mains[0][0], mains[0][1], 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
     this.membre(g, -1, HANCHE, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
@@ -468,7 +502,7 @@ Object.assign(Aquad.prototype, {
     }
 
     g.restore();
-    g.setPosition(j.go.x, j.go.y + 12);
+    g.setPosition(PJ.x, PJ.y + 12);
     g.setRotation(sens * inclinaison);
     // léger écrasement vertical : la caméra est au-dessus, pas en face
     g.setScale(sens, 0.92);
@@ -492,9 +526,10 @@ Object.assign(Aquad.prototype, {
   dessinerObjets(){
     const g = this.gObjets; g.clear();
     for (const o of this.objets){
-      const x = o.go.x, y = o.go.y + Math.sin(o.phase)*2.5;
+      const P = this.iso(o.go.x, o.go.y);
+      const x = P.x, y = P.y + Math.sin(o.phase)*2.5;
       // même les objets qui flottent projettent leur ombre au sol
-      g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, o.go.y + 12, 16, 5);
+      g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, P.y + 12, 16, 5);
       if (o.type === 'vie'){
         const bat = Math.sin(o.phase * 2) * 2;
         g.fillStyle(0xffd166, 0.22); g.fillCircle(x, y, 17);
@@ -526,8 +561,9 @@ Object.assign(Aquad.prototype, {
     const g = this.gEclats; g.clear();
     for (const e of this.eclats){
       const k = Math.max(0, e.vie / e.max);
+      const P = this.iso(e.x, e.y);
       g.fillStyle(e.couleur, k);
-      g.fillRect(e.x-2, e.y-2, 3 + k*2, 3 + k*2);
+      g.fillRect(P.x-2, P.y-2, 3 + k*2, 3 + k*2);
     }
   },
   dessinerTirs(){
@@ -537,8 +573,12 @@ Object.assign(Aquad.prototype, {
     if (j.attaque && COUPS[j.attaque.type].faisceau){
       const c = COUPS[j.attaque.type];
       const k = 1 - Phaser.Math.Clamp(j.attaque.t / c.duree, 0, 1);
-      const x0 = j.go.x + j.attaque.fx * 12, y0 = j.go.y + j.attaque.fy * 12 - 10;
-      const x1 = j.go.x + j.attaque.fx * (14 + c.portee), y1 = j.go.y + j.attaque.fy * (14 + c.portee) - 10;
+      // la géométrie du faisceau vit en monde (les monstres y sont testés),
+      // seul son dessin est projeté
+      const wx0 = j.go.x + j.attaque.fx * 12, wy0 = j.go.y + j.attaque.fy * 12;
+      const wx1 = j.go.x + j.attaque.fx * (14 + c.portee), wy1 = j.go.y + j.attaque.fy * (14 + c.portee);
+      const A = this.iso(wx0, wy0), B = this.iso(wx1, wy1);
+      const x0 = A.x, y0 = A.y - 10, x1 = B.x, y1 = B.y - 10;
       g.lineStyle(22*k, 0xc46bff, 0.2);
       g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.strokePath();
       g.lineStyle(9*k, 0xe9b6ff, 0.55);
@@ -550,7 +590,7 @@ Object.assign(Aquad.prototype, {
       if (j.attaque.t >= c.debut && j.attaque.t <= c.fin){
         for (const m of this.monstres){
           if (m.mort || j.attaque.touches.has(m)) continue;
-          const ligne = new Phaser.Geom.Line(x0, y0, x1, y1);
+          const ligne = new Phaser.Geom.Line(wx0, wy0, wx1, wy1);
           if (Phaser.Geom.Intersects.LineToRectangle(ligne, m.go.getBounds())){
             j.attaque.touches.add(m);
             this.frapper(m, c.degats + (j.attaque.elastique ? 1 : 0), c.recul, j.go.x, j.go.y);
@@ -564,18 +604,19 @@ Object.assign(Aquad.prototype, {
       const c = COUPS[j.attaque.type];
       if (j.attaque.t >= c.debut && j.attaque.t <= c.fin + 0.06){
         const z = this.zoneAttaque(j);
+        const Pz = this.iso(z.rect.centerX, z.rect.centerY);
         gC.lineStyle(4, 0xffffff, 0.5);
-        if (z.cercle) gC.strokeCircle(z.cercle.x, z.cercle.y, z.cercle.radius * 0.85);
-        else gC.strokeCircle(z.rect.centerX, z.rect.centerY, z.rect.width * 0.45);
+        gC.strokeEllipse(Pz.x, Pz.y, z.rect.width * 0.9, z.rect.width * 0.45);
       }
     }
     for (const t of this.tirs){
       if (t.lance){
         // la pierre ou la caisse en vol, qui tournoie — dessinée plus
         // haut que sa position logique, comme jetée par-dessus la tête
-        g.fillStyle(0x000000, 0.15); g.fillEllipse(t.x + SOLEIL.x, t.y + 10 + SOLEIL.y*0.5, 22, 6);
+        const P = this.iso(t.x, t.y);
+        g.fillStyle(0x000000, 0.15); g.fillEllipse(P.x + SOLEIL.x, P.y + 10 + SOLEIL.y*0.5, 22, 6);
         g.save();
-        g.translateCanvas(t.x, t.y - 16);
+        g.translateCanvas(P.x, P.y - 16);
         g.rotateCanvas((0.9 - t.vie) * 9 * Math.sign(t.vx || 1));
         if (t.type === 'caisse'){
           g.fillStyle(COUL.bois, 1);      g.fillRect(-11, -10, 22, 20);
@@ -589,18 +630,19 @@ Object.assign(Aquad.prototype, {
         g.restore();
         continue;
       }
+      const P = this.iso(t.x, t.y);
       if (t.jet){
         const a = (1.1 - t.vie) * 14 * Math.sign(t.vx || 1);
         const cx = Math.cos(a)*6, cy = Math.sin(a)*6;
-        g.fillStyle(t.couleur, 0.22); g.fillCircle(t.x, t.y, 9);
+        g.fillStyle(t.couleur, 0.22); g.fillCircle(P.x, P.y, 9);
         g.lineStyle(5, t.couleur, 1);
-        g.beginPath(); g.moveTo(t.x - cx, t.y - cy); g.lineTo(t.x + cx, t.y + cy); g.strokePath();
-        g.fillStyle(t.clair || 0xffffff, 0.95); g.fillCircle(t.x, t.y, 2.2);
+        g.beginPath(); g.moveTo(P.x - cx, P.y - cy); g.lineTo(P.x + cx, P.y + cy); g.strokePath();
+        g.fillStyle(t.clair || 0xffffff, 0.95); g.fillCircle(P.x, P.y, 2.2);
         continue;
       }
-      g.fillStyle(t.couleur, 0.25); g.fillCircle(t.x, t.y, 7);
-      g.fillStyle(t.couleur, 1);    g.fillCircle(t.x, t.y, 3.5);
-      g.fillStyle(0xffffff, 0.9);   g.fillCircle(t.x, t.y, 1.6);
+      g.fillStyle(t.couleur, 0.25); g.fillCircle(P.x, P.y, 7);
+      g.fillStyle(t.couleur, 1);    g.fillCircle(P.x, P.y, 3.5);
+      g.fillStyle(0xffffff, 0.9);   g.fillCircle(P.x, P.y, 1.6);
     }
   },
 
