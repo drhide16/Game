@@ -11,6 +11,9 @@ Object.assign(Combat.prototype, {
     const sx = this.cameras.main.scrollX;
     if (this.def.decor === 'interieur') this.dessinerInterieur(sx);
     else if (this.def.decor === 'toit') this.dessinerToit(sx);
+    else if (this.def.decor === 'foret') this.dessinerForet(sx);
+    else if (this.def.decor === 'desert') this.dessinerDesert(sx);
+    else if (this.def.decor === 'villeJour') this.dessinerVilleJour(sx);
     else this.dessinerDehors(sx);
     this.dessinerSortie();
     this.dessinerCaisses();
@@ -150,6 +153,76 @@ Object.assign(Combat.prototype, {
       g.fillStyle(t.neon, 0.9);  g.fillRect(x, 36, 84, 6);
     }
   },
+  dessinerForet(sx){
+    // petit matin : ciel laiteux, soleil bas, trois rangées de sapins
+    // du plus pâle (loin) au plus sombre (près)
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0xa8d8d0, 0xa8d8d0, 0xe8f0d8, 0xe8f0d8, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    g.fillStyle(0xfff2c0, 0.18); g.fillCircle(190, 92, 80);
+    g.fillStyle(0xfff2c0, 0.55); g.fillCircle(190, 92, 44);
+    this.sapins(g, sx*0.15, 0x9bbf8e, 306, 62, 92);
+    this.sapins(g, sx*0.32, 0x6fa06b, 340, 88, 122);
+    this.sapins(g, sx*0.55, 0x497a52, 378, 118, 152);
+  },
+  sapins(g, off, couleur, base, h, pas){
+    const debut = Math.floor(off/pas) - 1;
+    g.fillStyle(couleur, 1);
+    for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+      const x = i*pas - off + (i % 3) * 14;
+      const hh = h * (0.75 + Math.abs(Math.sin(i*12.99)) * 0.5);
+      g.fillTriangle(x - hh*0.42, base, x + hh*0.42, base, x, base - hh);
+      g.fillTriangle(x - hh*0.34, base - hh*0.34, x + hh*0.34, base - hh*0.34, x, base - hh*1.28);
+    }
+  },
+  dessinerDesert(sx){
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0x8fd0e8, 0x8fd0e8, 0xf2dfae, 0xf2dfae, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    g.fillStyle(0xfff6d0, 0.35); g.fillCircle(700, 86, 62);
+    g.fillStyle(0xffffff, 0.9);  g.fillCircle(700, 86, 34);
+    this.collines(g, sx*0.2, 0xe3c078, 26, 300, 1);
+    this.collines(g, sx*0.45, 0xcda45c, 20, 340, 1);
+    // cactus à bras, plantés au premier plan
+    const pas = 260, debut = Math.floor(sx*0.6/pas) - 1;
+    g.fillStyle(0x4f7d46, 1);
+    for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+      const x = i*pas - sx*0.6 + (i % 2) * 40;
+      const h = 34 + Math.abs(Math.sin(i*7.7)) * 30;
+      g.fillRect(x-5, SOL_Y - h, 10, h);
+      g.fillRect(x-16, SOL_Y - h*0.62, 12, 6);
+      g.fillRect(x-16, SOL_Y - h*0.62 - 12, 6, 16);
+      g.fillRect(x+5,  SOL_Y - h*0.45, 12, 6);
+      g.fillRect(x+11, SOL_Y - h*0.45 - 10, 6, 14);
+    }
+  },
+  dessinerVilleJour(sx){
+    const g = this.fond; g.clear();
+    g.fillGradientStyle(0x9fd3ef, 0x9fd3ef, 0xdcedf7, 0xdcedf7, 1);
+    g.fillRect(0, 0, L, SOL_Y);
+    const pasN = 300, dN = Math.floor(sx*0.08/pasN) - 1;
+    g.fillStyle(0xffffff, 0.8);
+    for (let i = dN; i < dN + Math.ceil(L/pasN) + 3; i++){
+      const x = i*pasN - sx*0.08, y = 58 + (i % 3) * 34;
+      g.fillEllipse(x, y, 90, 22); g.fillEllipse(x+34, y-8, 60, 18);
+    }
+    this.batimentsClairs(g, sx*0.3, 0xb9c8d8, 0x8fa2b8, 150, 60, 130);
+    this.batimentsClairs(g, sx*0.55, 0x94a8bc, 0x6d8098, 120, 100, 170);
+  },
+  batimentsClairs(g, off, corps, ombre, pas, hMin, hVar){
+    const debut = Math.floor(off/pas) - 1;
+    for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+      const h = hMin + Math.abs(Math.sin(i*7.13)) * hVar;
+      const w = 58 + Math.abs(Math.cos(i*3.71)) * 40;
+      const x = i*pas - off, y = SOL_Y - h;
+      g.fillStyle(corps, 1); g.fillRect(x, y, w, h);
+      g.fillStyle(ombre, 1); g.fillRect(x, y, w, 5);
+      g.fillStyle(0x3c4b5c, 0.75);
+      for (let fy = y + 12; fy < SOL_Y - 14; fy += 20)
+        for (let fx = x + 8; fx < x + w - 11; fx += 17)
+          g.fillRect(fx, fy, 7, 9);
+    }
+  },
   dessinerToit(sx){
     const g = this.fond; g.clear();
     g.fillGradientStyle(0x06080f, 0x06080f, 0x2c1743, 0x2c1743, 1);
@@ -223,8 +296,7 @@ Object.assign(Combat.prototype, {
         g.beginPath(); g.moveTo(x - 14, y); g.lineTo(x + 14, y); g.strokePath();
       }
       g.fillStyle(0x4dd6c1, 0.3 + 0.3*pulse); g.fillTriangle(x, sol - 216, x - 13, sol - 200, x + 13, sol - 200);
-      return;
-    }
+    } else
     if (this.def.sortie === 'porte'){
       // l'entrée de la tour : un bloc sombre percé d'une porte éclairée
       g.fillStyle(0x120f22, 1); g.fillRect(x - 90, sol - 300, 180, 300);
@@ -239,24 +311,35 @@ Object.assign(Combat.prototype, {
       g.fillStyle(0x090c16, 1); g.fillRect(x - 34, sol - 96, 68, 96);
       g.fillStyle(0xffd98a, 0.35 + 0.35*pulse); g.fillRect(x - 34, sol - 96, 68, 6);
       g.lineStyle(3, COUL.ceinture, 0.8); g.strokeRect(x - 34, sol - 96, 68, 96);
-      return;
-    }
-    // ascenseur
-    g.fillStyle(0x0d1120, 1);  g.fillRect(x - 44, sol - 132, 88, 132);
+    } else if (this.def.sortie === 'arche'){
+      // arche de pierre : la sortie des niveaux de plein air
+      g.fillStyle(0x000000, 0.18); g.fillEllipse(x, sol, 96, 10);
+      g.fillStyle(0x5d5040, 1); g.fillRect(x - 46, sol - 120, 18, 120);
+      g.fillStyle(0x5d5040, 1); g.fillRect(x + 28, sol - 120, 18, 120);
+      g.fillStyle(0x7a6a52, 1); g.fillRect(x - 42, sol - 116, 12, 116);
+      g.fillStyle(0x7a6a52, 1); g.fillRect(x + 30, sol - 116, 12, 116);
+      g.fillStyle(0x5d5040, 1); g.fillRect(x - 54, sol - 138, 108, 24);
+      g.fillStyle(0x7a6a52, 1); g.fillRect(x - 50, sol - 134, 100, 14);
+      g.fillStyle(0xffd98a, 0.10 + 0.25*pulse); g.fillRect(x - 28, sol - 114, 56, 114);
+      g.fillStyle(0x4dd6c1, 0.35 + 0.5*pulse);
+      g.fillTriangle(x, sol - 156, x - 13, sol - 141, x + 13, sol - 141);
+    } else {
+      g.fillStyle(0x0d1120, 1);  g.fillRect(x - 44, sol - 132, 88, 132);
     g.fillStyle(0x2a3152, 1);  g.fillRect(x - 40, sol - 126, 80, 126);
     g.fillStyle(0x141a30, 1);  g.fillRect(x - 34, sol - 118, 68, 118);
     g.lineStyle(3, 0x7f8cc4, 1); g.strokeRect(x - 40, sol - 126, 80, 126);
     g.lineStyle(2, 0x7f8cc4, 0.8);
     g.beginPath(); g.moveTo(x, sol - 118); g.lineTo(x, sol); g.strokePath();
     // flèche qui monte
-    g.fillStyle(bloquee ? 0xe2584d : 0x4dd6c1, bloquee ? 0.5 : 0.35 + 0.5*pulse);
-    g.fillTriangle(x, sol - 150, x - 14, sol - 134, x + 14, sol - 134);
-    g.fillStyle(bloquee ? 0xe2584d : 0xffd98a, 0.25 + 0.35*pulse); g.fillRect(x - 40, sol - 138, 80, 5);
+      g.fillStyle(bloquee ? 0xe2584d : 0x4dd6c1, bloquee ? 0.5 : 0.35 + 0.5*pulse);
+      g.fillTriangle(x, sol - 150, x - 14, sol - 134, x + 14, sol - 134);
+      g.fillStyle(bloquee ? 0xe2584d : 0xffd98a, 0.25 + 0.35*pulse); g.fillRect(x - 40, sol - 138, 80, 5);
+    }
+    // sortie condamnée tant que le boss tient : la croix vaut pour toutes
     if (bloquee){
-      // deux barres en croix : la sortie est visiblement condamnée
       g.lineStyle(5, 0xe2584d, 0.75);
-      g.beginPath(); g.moveTo(x - 34, sol - 110); g.lineTo(x + 34, sol - 14); g.strokePath();
-      g.beginPath(); g.moveTo(x + 34, sol - 110); g.lineTo(x - 34, sol - 14); g.strokePath();
+      g.beginPath(); g.moveTo(x - 34, sol - 112); g.lineTo(x + 34, sol - 16); g.strokePath();
+      g.beginPath(); g.moveTo(x + 34, sol - 112); g.lineTo(x - 34, sol - 16); g.strokePath();
     }
   },
 
@@ -420,6 +503,7 @@ Object.assign(Combat.prototype, {
     const t = this.phase;
     const marche = Math.abs(b.velocity.x) > 20;
     let pieds, mains, inclinaison = -0.03;
+    let etB = 1, etJ = 1;   // étirement élastique du bras et de la jambe qui frappent
     const allure = Math.min(1, Math.abs(b.velocity.x) / CFG.vitesseCourse);
     const rampe = this.accroupi && marche;
     let tasse = this.accroupi ? (rampe ? 13 : 9) : 0;
@@ -431,18 +515,22 @@ Object.assign(Combat.prototype, {
       const c = COUPS[this.attaque.type];
       const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
       const ext = Math.sin(Math.PI * Math.min(1, p * 1.2));
+      const ela = PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1;
       if (this.attaque.type === 'poing'){
-        mains = [[-6 - ext*3, EPAULE + 9], [4 + ext*22, EPAULE + 2 - ext*3]];
+        etB = ela;
+        mains = [[-6 - ext*3, EPAULE + 9], [(4 + ext*22) * ela, EPAULE + 2 - ext*3]];
         pieds = [[-9 - ext*2, 0], [7 + ext*2, 0]];
         inclinaison = -0.05 - ext*0.06;
       } else if (this.attaque.type === 'pied'){
         mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
-        pieds = [[-6, 0], [6 + ext*26, -6 - ext*14]];
+        etJ = ela;
+        pieds = [[-6, 0], [(6 + ext*26) * ela, -6 - ext*14]];
         inclinaison = 0.04 + ext*0.12;
       } else if (this.attaque.type === 'crochet'){
         // le bras ne peut pas dépasser le sommet du crâne, sa longueur
         // l'en empêche : c'est le corps qui se soulève avec le coup
-        mains = [[-7 + ext*2, EPAULE + 12], [5 + ext*3, EPAULE - 4 - ext*22]];
+        etB = ela;
+        mains = [[-7 + ext*2, EPAULE + 12], [5 + ext*3, EPAULE - 4 - ext*22*ela]];
         pieds = [[-8, 0], [7, -ext*3]];
         inclinaison = 0.02 - ext*0.10;
         tasse -= ext * 4;
@@ -453,7 +541,8 @@ Object.assign(Combat.prototype, {
       } else {
         const balai = -1 + 2*p;
         mains = [[-12*balai, EPAULE + 4], [12*balai, EPAULE + 6]];
-        pieds = [[-4, 0], [balai*30, -14 - Math.sin(Math.PI*p)*8]];
+        etJ = ela;
+        pieds = [[-4, 0], [balai*30*ela, -14 - Math.sin(Math.PI*p)*8]];
         inclinaison = -0.10 + p*0.20;
       }
     } else if (!auSol){
@@ -521,9 +610,9 @@ Object.assign(Combat.prototype, {
     g.fillRect(-7, HA-3, 14, 4);
     g.fillRect(-7.5, HA-3, 3, 8);
 
-    this.membre(g, 1, HA, pieds[1][0], pieds[1][1], 9.5, 9.5, -1, COUL.gi, COUL.gi, 9, 7.5);
+    this.membre(g, 1, HA, pieds[1][0], pieds[1][1], 9.5*etJ, 9.5*etJ, -1, COUL.gi, COUL.gi, 9, 7.5);
     g.fillStyle(COUL.botte, 1); g.fillEllipse(pieds[1][0]+1, pieds[1][1]-1.5, 11, 6.4);
-    this.membre(g, 1, EP, mains[1][0], my(1), 8, 8, 1, COUL.gi, COUL.peau, 7.5, 5.5);
+    this.membre(g, 1, EP, mains[1][0], my(1), 8*etB, 8*etB, 1, COUL.gi, COUL.peau, 7.5, 5.5);
     if (this.arme){
       const a = ARMES[this.arme];
       g.fillStyle(a.couleur, 1); g.fillCircle(mains[1][0], my(1), 4.4);

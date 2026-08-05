@@ -47,6 +47,24 @@ function retourAuTitre(){
   afficherRecord();       // la partie perdue vient peut-être de le battre
 }
 
+// le choix de difficulté : sélectionne sans lancer la partie, et s'en
+// souvient d'une fois sur l'autre
+const choixDiff = document.getElementById('choixDiff');
+function majChoixDiff(){
+  for (const b of choixDiff.querySelectorAll('button'))
+    b.classList.toggle('choisi', b.dataset.d === DIFFICULTE_CHOISIE);
+}
+majChoixDiff();
+choixDiff.addEventListener('pointerdown', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();   // l'écran-titre lance la partie au moindre appui : pas ici
+  DIFFICULTE_CHOISIE = b.dataset.d;
+  try { localStorage.setItem('mgc-difficulte', DIFFICULTE_CHOISIE); } catch (err) {}
+  majChoixDiff();
+});
+
 if (typeof Phaser !== 'undefined'){
   document.getElementById('titre').addEventListener('pointerdown', e => {
     e.preventDefault(); demarrer();
