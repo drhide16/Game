@@ -243,8 +243,15 @@ Object.assign(Aquad.prototype, {
     const marche = vitesse > 20;
     const allure = Math.min(1, vitesse / CFG.vitesse);
     const t = j.phase;
-    const sens = j.fx < -0.05 ? -1 : 1;
-    let pieds, mains, inclinaison = 0, rotation = null;
+    // la direction DESSINÉE : le dos quand il monte, la face quand il
+    // descend, le profil sur les côtés — c'est elle qui donne le volume.
+    // Pendant un coup, c'est la direction du coup qui commande.
+    const dfx = j.attaque ? j.attaque.fx : j.fx;
+    const dfy = j.attaque ? j.attaque.fy : j.fy;
+    const vue = j.attaque ? 'profil'
+      : (Math.abs(dfy) > Math.abs(dfx) ? (dfy < 0 ? 'dos' : 'face') : 'profil');
+    const sens = (vue === 'profil' && dfx < -0.05) ? -1 : 1;
+    let pieds, mains, inclinaison = 0;
 
     if (j.porte){
       // les deux mains au-dessus de la tête, l'objet posé dessus
@@ -265,11 +272,9 @@ Object.assign(Aquad.prototype, {
       if (j.attaque.type === 'poing'){
         mains = [[-6 - ext*3, EPAULE + 9], [(4 + ext*22) * ela, EPAULE + 2 - ext*3]];
         pieds = [[-9, 0], [7, 0]];
-        inclinaison = 0.05 + ext*0.05;
       } else if (j.attaque.type === 'pied'){
         mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
         pieds = [[-6, 0], [(6 + ext*26) * ela, -6 - ext*10]];
-        inclinaison = 0.04 + ext*0.10;
       } else {
         // arme : le bras tendu vers la cible
         mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
@@ -304,20 +309,35 @@ Object.assign(Aquad.prototype, {
     }
 
     // l'ombre fait exactement la largeur de la boîte au sol : c'est elle
-    // qu'on regarde pour juger un contact
+    // qu'on regarde pour juger un contact. Elle reste collée au sol pendant
+    // que le corps rebondit sur ses pas — le volume le moins cher du monde.
     g.fillStyle(0x000000, 0.22); g.fillEllipse(0, 3, 26, 8);
+    const lev = (marche && !j.attaque) ? Math.abs(Math.sin(t)) * 2 : 0;
+    g.save();
+    g.translateCanvas(0, -lev);
+    // pendant un coup, tout le corps se fend vers la direction du coup
+    if (j.attaque) g.rotateCanvas(sens === 1 ? Math.atan2(dfy, dfx) : Math.atan2(dfy, -dfx));
 
     this.membre(g, -1, EPAULE, mains[0][0], mains[0][1], 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
     this.membre(g, -1, HANCHE, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
     g.fillStyle(0x171d33, 1); g.fillEllipse(pieds[0][0]+1, pieds[0][1]-1.5, 10, 6);
 
+    // le torse est plus étroit vu de profil
+    const larg = vue === 'profil' ? 5 : 7;
     g.fillStyle(COUL.gi, 1);
-    g.fillPoints([{x:-7,y:EPAULE},{x:7,y:EPAULE},{x:6,y:HANCHE+1},{x:-6,y:HANCHE+1}], true);
+    g.fillPoints([{x:-larg,y:EPAULE},{x:larg,y:EPAULE},{x:larg-1,y:HANCHE+1},{x:-(larg-1),y:HANCHE+1}], true);
     g.lineStyle(2.4, COUL.col, 1);
-    g.beginPath(); g.moveTo(-3, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
-    g.beginPath(); g.moveTo(5, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
+    if (vue === 'face'){
+      g.beginPath(); g.moveTo(-3, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
+      g.beginPath(); g.moveTo(5, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
+    } else if (vue === 'dos'){
+      g.beginPath(); g.moveTo(-4, EPAULE); g.lineTo(4, EPAULE); g.strokePath();
+    } else {
+      g.beginPath(); g.moveTo(1, EPAULE-1); g.lineTo(3.5, EPAULE+7); g.strokePath();
+    }
     g.fillStyle(COUL.ceinture, 1);
-    g.fillRect(-7, HANCHE-3, 14, 4);
+    g.fillRect(-larg, HANCHE-3, larg*2, 4);
+    if (vue === 'dos') g.fillRect(-2, HANCHE-5, 4, 8);   // le nœud, dans le dos
 
     const bras2 = j.attaque && j.attaque.type === 'poing' && j.attaque.elastique ? CFG.porteeElastique : 1;
     const jambe2 = j.attaque && j.attaque.type === 'pied' && j.attaque.elastique ? CFG.porteeElastique : 1;
@@ -341,14 +361,28 @@ Object.assign(Aquad.prototype, {
       if (j.charge.pret){ g.fillStyle(0xffffff, 0.85); g.fillCircle(cx, cy, 2); }
     }
 
+    // la tête, grosse comme il faut vu d'en haut, change avec la vue
     const hx = 1, hy = TETE;
-    g.fillStyle(COUL.cheveux, 1);
     const pointes = [[-7,3],[-9,-3],[-13,-7],[-7,-6],[-10,-13],[-3,-8],[0,-15],[3,-7],[9,-11],[6,-3],[10,-4],[7,1]];
-    g.fillPoints(pointes.map(p => ({ x: hx + p[0], y: hy + p[1] })), true);
-    g.fillStyle(COUL.peau, 1); g.fillCircle(hx+1, hy, 5.6);
+    const rec = vue === 'profil' ? -2 : 0;   // cheveux balayés vers l'arrière
     g.fillStyle(COUL.cheveux, 1);
-    g.fillEllipse(hx+0.5, hy-4.6, 11.6, 5);
-    g.fillRect(hx+2.5, hy-1.6, 2, 2.6);
+    g.fillPoints(pointes.map(p => ({ x: hx + p[0]*1.15 + rec, y: hy + p[1]*1.15 })), true);
+    g.fillStyle(COUL.peau, 1); g.fillCircle(hx+1, hy, 6.6);
+    g.fillStyle(COUL.cheveux, 1);
+    if (vue === 'dos'){
+      // de dos : la chevelure couvre toute la tête, la nuque dépasse en bas
+      g.fillCircle(hx+1, hy-1.4, 6.6);
+      g.fillEllipse(hx+1, hy-5, 13.4, 6.4);
+    } else if (vue === 'face'){
+      g.fillEllipse(hx+0.5, hy-5.2, 13.4, 5.8);
+      g.fillStyle(0x1a0f22, 1);
+      g.fillRect(hx-4.2, hy-1.4, 2, 2.6);
+      g.fillRect(hx+2.6, hy-1.4, 2, 2.6);
+    } else {
+      g.fillEllipse(hx-1, hy-5.2, 13.4, 5.8);
+      g.fillStyle(0x1a0f22, 1);
+      g.fillRect(hx+3.4, hy-1.4, 2, 2.6);   // un seul œil, tourné vers l'avant
+    }
 
     // l'objet porté, posé sur les mains levées
     if (j.porte){
@@ -366,9 +400,11 @@ Object.assign(Aquad.prototype, {
       }
     }
 
+    g.restore();
     g.setPosition(j.go.x, j.go.y + 12);
-    g.setRotation(rotation !== null ? rotation : sens * inclinaison);
-    g.setScale(sens, 1);
+    g.setRotation(sens * inclinaison);
+    // léger écrasement vertical : la caméra est au-dessus, pas en face
+    g.setScale(sens, 0.92);
     g.setAlpha(j.invuln > 0 && Math.floor(j.invuln*20) % 2 === 0 ? 0.35 : 1);
   },
   membre(g, hx, hy, tx, ty, l1, l2, sens, c1, c2, e1, e2){

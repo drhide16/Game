@@ -194,12 +194,21 @@ class Aquad extends Phaser.Scene {
   lancerAttaque(j, type, elastique){
     if (j.attaque) return;
     const c = COUPS[type];
-    // aimantation : le coup pivote vers l'ennemi le plus proche du regard
-    if (c.portee && !c.faisceau) this.aimanter(j, CFG.aimantPortee, CFG.aimantCone);
-    else this.aimanter(j, CFG.aimantPorteeTir, CFG.aimantCone * 0.55);
+    // aimantation : le coup pivote vers l'ennemi le plus proche du regard.
+    // Au corps à corps on retient la cible : la fente (plus bas) fera
+    // glisser le corps jusqu'à elle pour que le coup porte vraiment.
+    let cible = null;
+    if (c.portee && !c.faisceau){
+      cible = this.chercherCible(j, CFG.aimantPortee, CFG.aimantCone);
+      if (cible){
+        const d = Math.hypot(cible.go.x - j.go.x, cible.go.y - j.go.y) || 1;
+        j.fx = (cible.go.x - j.go.x) / d;
+        j.fy = (cible.go.y - j.go.y) / d;
+      }
+    } else this.aimanter(j, CFG.aimantPorteeTir, CFG.aimantCone * 0.55);
     // la direction du coup est figée au départ : le faisceau et les
     // balles partent là où on regardait en appuyant
-    j.attaque = { type, t:0, fx:j.fx, fy:j.fy,
+    j.attaque = { type, t:0, fx:j.fx, fy:j.fy, cible,
       elastique: !!elastique && !!c.portee, touches:new Set() };
     if (j.attaque.elastique) this.crier(j.go.x, j.go.y - 40, CRIS.kiai, '#ffd166', 15);
     SON.jouer(c.son);
@@ -591,6 +600,14 @@ class Aquad extends Phaser.Scene {
     if (j.attaque){
       const c = COUPS[j.attaque.type];
       j.attaque.t += dt;
+      // la fente : le corps glisse vers la cible aimantée tant qu'elle est
+      // hors de portée — l'anneau doré tient sa promesse
+      const f = j.attaque.cible;
+      if (f && !f.mort && j.attaque.t <= c.fin){
+        const dx = f.go.x - j.go.x, dy = f.go.y - j.go.y;
+        const d = Math.hypot(dx, dy);
+        if (d > c.portee + 6) j.go.body.setVelocity(dx/d * 380, dy/d * 380);
+      }
       if (j.attaque.t >= c.debut && j.attaque.t <= c.fin){
         const z = this.zoneAttaque(j);
         if (z){
@@ -709,7 +726,7 @@ class Aquad extends Phaser.Scene {
           m.prepare = ch.preparation; m.repos = ch.repos;
           m.go.body.setVelocity(0, 0);
           SON.jouer('charge');
-        } else if (dist < 300){
+        } else if (dist < 240){
           const d = dist || 1;
           const v = m.def.vitesse * this.D.vitesse;
           m.go.body.setVelocity(dx/d * v, dy/d * v);
