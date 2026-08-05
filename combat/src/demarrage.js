@@ -12,7 +12,7 @@ function demarrer(){
   document.body.classList.add('enjeu');
   SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
   ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false;
-  ENTREE.accroupi = false; ENTREE.coupPresse = null;
+  ENTREE.accroupi = false; ENTREE.chargeAction = null; ENTREE.relache = null;
   ENTREE.haut = false; ENTREE.hautPresse = false; ENTREE.validePresse = false;
   PARTIE = nouvellePartieEtat();
 

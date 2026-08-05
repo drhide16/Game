@@ -16,10 +16,7 @@ let PARTIE = null;
 function nouvellePartieEtat(){
   const D = DIFFICULTES[DIFFICULTE_CHOISIE] || DIFFICULTES.moyen;
   return { niveau:0, pv:CFG.pvJoueur, vies:D.vies, difficulte:DIFFICULTE_CHOISIE,
-           arme:null, munitions:0, segments:0, vaincus:0, morts:0,
-           // vaincre 3 monstres d'un même coup le débloque en élastique
-           maitrise:{ poing:0, pied:0, retourne:0, crochet:0 },
-           elastique:{ poing:false, pied:false, retourne:false, crochet:false } };
+           arme:null, munitions:0, segments:0, vaincus:0, morts:0 };
 }
 PARTIE = nouvellePartieEtat();
 

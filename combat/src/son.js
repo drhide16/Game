@@ -65,6 +65,7 @@ const SON = {
       case 'gagne':    [523,659,784,1047].forEach((f,i) => this.note('square', f, f, 0.2, 0.2, i*0.11)); break;
       case 'vide':     this.note('square', 160, 120, 0.06, 0.12); break;
       case 'ejecte':   this.note('square', 1100, 700, 0.07, 0.18); this.souffle(0.14, 0.32, 900, 1.2); break;
+      case 'tendu':    this.note('square', 620, 980, 0.09, 0.16); break;
       case 'competence':[523,784,1047,1568].forEach((f,i) => this.note('square', f, f, 0.13, 0.2, i*0.07)); break;
       case 'unevie':   [392,523,659,784,1047].forEach((f,i) => this.note('triangle', f, f, 0.16, 0.22, i*0.07)); break;
       case 'recharge': this.note('square', 500, 500, 0.05, 0.16); this.note('square', 950, 950, 0.06, 0.2, 0.08); break;
