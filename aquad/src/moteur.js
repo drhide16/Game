@@ -6,8 +6,22 @@
 // ─────────────────────────────────────────────────────────────
 const MARGE_EAU = 260;   // l'eau visible autour de l'île
 
+// ─────────────────────────────────────────────────────────────
+// PROJECTION ISOMÉTRIQUE
+// La simulation vit en coordonnées MONDE (un rectangle plat : physique,
+// collisions, aimantation inchangées). Seul le rendu projette en losange :
+// px = (x − y)·0.707, py = (x + y)·0.354 — soit rotation 45° + écrasement
+// vertical de moitié. Le sol se dessine à travers cette transformation ;
+// les personnages restent debout (billboards) aux positions projetées.
+// ─────────────────────────────────────────────────────────────
+const ISO_C = 0.7071, ISO_S = 0.3536;
+
 class Aquad extends Phaser.Scene {
   constructor(){ super('aquad'); }
+
+  iso(x, y){ return { x: (x - y) * ISO_C, y: (x + y) * ISO_S }; }
+  // l'inverse : d'un vecteur écran vers un vecteur monde (pour le joystick)
+  isoInv(px, py){ return { x: px / (2*ISO_C) + py / (2*ISO_S), y: -px / (2*ISO_C) + py / (2*ISO_S) }; }
 
   create(){
     this.def = NIVEAUX[Math.min(PARTIE.niveau, NIVEAUX.length - 1)];
@@ -29,7 +43,8 @@ class Aquad extends Phaser.Scene {
 
     // le joueur ne sort pas de la terre : les limites physiques SONT l'île
     this.physics.world.setBounds(this.ileX, this.ileY, this.ileL, this.ileH);
-    this.cameras.main.setBounds(0, 0, mondeL, mondeH);
+    // la caméra vit en espace ÉCRAN : les bornes sont le losange projeté
+    this.cameras.main.setBounds(-mondeH * ISO_C, 0, (mondeL + mondeH) * ISO_C, (mondeL + mondeH) * ISO_S);
 
     this.gSol    = this.add.graphics().setDepth(-10);   // eau et terre, en coordonnées monde
     this.gSortie = this.add.graphics().setDepth(-4);
@@ -71,7 +86,10 @@ class Aquad extends Phaser.Scene {
       this.bulles.push({ t, vie:0, max:1, vy:0 });
     }
 
-    this.cameras.main.startFollow(j.go, true, 0.12, 0.12);
+    // la caméra suit un fantôme placé à la PROJECTION du joueur
+    const p0 = this.iso(j.go.x, j.go.y);
+    this.suiveur = this.add.rectangle(p0.x, p0.y, 1, 1, 0xffffff, 0);
+    this.cameras.main.startFollow(this.suiveur, true, 0.12, 0.12);
 
     this.hud = this.add.graphics().setScrollFactor(0).setDepth(9000);
     const style = f => ({ fontFamily:'ui-monospace, Menlo, monospace', fontSize:f, color:'#eaf4f0' });
@@ -107,7 +125,7 @@ class Aquad extends Phaser.Scene {
     const c = this.add.rectangle(p.x, p.y, larg, haut, 0xffffff, 0);
     this.physics.add.existing(c, true);
     this.grObstacles.add(c);
-    const d = { type, x: p.x, y: p.y, g: this.add.graphics().setDepth(p.y), phase: this.alea()*6 };
+    const d = { type, x: p.x, y: p.y, g: this.add.graphics().setDepth(this.iso(p.x, p.y).y), phase: this.alea()*6 };
     this.decors.push(d);
     this.dessinerDecor(d);
   }
@@ -116,14 +134,14 @@ class Aquad extends Phaser.Scene {
     const c = this.add.rectangle(p.x, p.y, 28, 24, 0xffffff, 0);
     this.physics.add.existing(c, true);
     this.grObstacles.add(c);
-    this.caisses.push({ go:c, pv:2, flash:0, g: this.add.graphics().setDepth(p.y) });
+    this.caisses.push({ go:c, pv:2, flash:0, g: this.add.graphics().setDepth(this.iso(p.x, p.y).y) });
   }
   creerPierre(){
     const p = this.poseLibre(60);
     const c = this.add.rectangle(p.x, p.y, 16, 14, 0xffffff, 0);
     this.physics.add.existing(c, true);
     this.grObstacles.add(c);
-    this.pierres.push({ go:c, g: this.add.graphics().setDepth(p.y) });
+    this.pierres.push({ go:c, g: this.add.graphics().setDepth(this.iso(p.x, p.y).y) });
   }
   creerMonstre(type, x, y){
     const d = MONSTRES[type];
@@ -392,9 +410,10 @@ class Aquad extends Phaser.Scene {
   message(txt){ this.msg = { t:0 }; this.hudMsg.setText(txt).setAlpha(1); }
   crier(x, y, mots, couleur, taille){
     const b = this.bulles[this.bulleSuiv = (this.bulleSuiv + 1) % this.bulles.length];
+    const P = this.iso(x, y);
     b.t.setText(mots[Math.floor(this.alea() * mots.length)])
       .setColor(couleur || '#ffffff').setFontSize(taille || 18)
-      .setPosition(x, y).setAngle((this.alea() * 2 - 1) * 14).setVisible(true);
+      .setPosition(P.x, P.y - 20).setAngle((this.alea() * 2 - 1) * 14).setVisible(true);
     b.vie = b.max = 0.55;
     b.vy = -46;
   }
@@ -461,7 +480,9 @@ class Aquad extends Phaser.Scene {
     majBoutonAction(false);
     j.endurance = CFG.enduranceMax;
     j.go.body.reset(this.checkpoint.x, this.checkpoint.y);
-    this.cameras.main.centerOn(this.checkpoint.x, this.checkpoint.y);
+    const P = this.iso(this.checkpoint.x, this.checkpoint.y);
+    this.suiveur.setPosition(P.x, P.y);
+    this.cameras.main.centerOn(P.x, P.y);
     for (const m of this.monstres){
       const d = Math.hypot(m.go.x - this.checkpoint.x, m.go.y - this.checkpoint.y);
       if (d < 180){
@@ -639,12 +660,21 @@ class Aquad extends Phaser.Scene {
     }
 
     // ── déplacement : deux axes analogiques ──
+    // le joystick parle en directions ÉCRAN ; on les convertit en monde
+    // pour que pousser vers le haut fasse monter le perso à l'écran
+    const nS = Math.hypot(ENTREE.axeX, ENTREE.axeY);
+    let axeMX = 0, axeMY = 0;
+    if (nS > 0.001){
+      const w = this.isoInv(ENTREE.axeX, ENTREE.axeY);
+      const nW = Math.hypot(w.x, w.y) || 1;
+      axeMX = w.x / nW * nS;
+      axeMY = w.y / nW * nS;
+    }
     const bloque = j.attaque && !COUPS[j.attaque.type].tir;
     const lest = j.porte ? CFG.porteVitesse : 1;   // chargé, on avance moins vite
-    const cx = bloque ? 0 : ENTREE.axeX * CFG.vitesse * lest;
-    const cy = bloque ? 0 : ENTREE.axeY * CFG.vitesse * lest;
-    const n = Math.hypot(ENTREE.axeX, ENTREE.axeY);
-    if (n > 0.05 && !bloque){ j.fx = ENTREE.axeX / n; j.fy = ENTREE.axeY / n; }
+    const cx = bloque ? 0 : axeMX * CFG.vitesse * lest;
+    const cy = bloque ? 0 : axeMY * CFG.vitesse * lest;
+    if (nS > 0.05 && !bloque){ j.fx = axeMX / nS; j.fy = axeMY / nS; }
 
     const b = j.go.body;
     const ax = (cx !== 0 ? CFG.accel : CFG.frein) * dt;
