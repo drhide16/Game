@@ -125,4 +125,16 @@ try {
   if (DIFFICULTES[d]) DIFFICULTE_CHOISIE = d;
 } catch (e) {}
 
+// Les onomatopées, façon manga. Chaque contexte pioche dans son bocal.
+const CRIS = {
+  coup:     ['BAM !', 'PAF !', 'BIM !', 'TCHAK !', 'POW !'],
+  kiai:     ['HA !', 'YAH !', 'HOP !'],
+  vaincu:   ['SPLAF !', 'PAF !', 'OUF !'],
+  boss:     ['K.O. !'],
+  blinde:   ['TING !', 'CLANG !'],
+  aie:      ['AÏE !', 'OUCH !', 'OUILLE !', 'OH !'],
+  ecrase:   ['SPROTCH !', 'SPLAT !'],
+  caisse:   ['CRAC !'],
+};
+
 const HANCHE = -19, EPAULE = -30, TETE = -35;
