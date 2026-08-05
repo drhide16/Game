@@ -22,37 +22,104 @@ Object.assign(Aquad.prototype, {
   },
 
   // ── le sol : l'eau, la plage, l'herbe ───────────────────────
+  // le contour de l'île à une marge donnée, ondulé par deux sinus figés
+  // (fonction de la position monde, jamais du temps : la côte ne grouille
+  // pas) — un polygone organique à la place d'un rectangle de carte
+  contourIle(marge){
+    const iX = this.ileX - marge, iY = this.ileY - marge;
+    const iL = this.ileL + marge*2, iH = this.ileH + marge*2;
+    const ond = k => Math.sin(k * 0.017) * 7 + Math.sin(k * 0.031) * 4;
+    const pas = 56, pts = [];
+    for (let x = iX; x < iX + iL; x += pas) pts.push({ x, y: iY + ond(x) });
+    for (let y = iY; y < iY + iH; y += pas) pts.push({ x: iX + iL + ond(y), y });
+    for (let x = iX + iL; x > iX; x -= pas) pts.push({ x, y: iY + iH + ond(x + 999) });
+    for (let y = iY + iH; y > iY; y -= pas) pts.push({ x: iX + ond(y + 999), y });
+    return pts;
+  },
   dessinerSol(){
     const g = this.gSol; g.clear();
     const cam = this.cameras.main;
     const vx = cam.scrollX - 40, vy = cam.scrollY - 40;
     const vl = L + 80, vh = H + 80;
     const t = this.def.teinte;
+    const visible = (x, y) => x > vx && x < vx + vl && y > vy && y < vy + vh;
 
     // l'eau partout, en deux profondeurs
     g.fillStyle(COUL.eauProfonde, 1); g.fillRect(vx, vy, vl, vh);
     const iX = this.ileX, iY = this.ileY, iL = this.ileL, iH = this.ileH;
     g.fillStyle(COUL.eau, 1); g.fillRect(iX - 90, iY - 90, iL + 180, iH + 180);
 
-    // vaguelettes d'écume autour de l'île, qui respirent
-    const ond = Math.sin(this.time.now / 600) * 5;
+    // vaguelettes d'écume qui respirent le long de la côte (des TRAITS :
+    // pas de triangulation, donc pas de polygone géant qui rate)
+    const resp = Math.sin(this.time.now / 600) * 4;
     g.lineStyle(4, COUL.eauClaire, 0.7);
-    g.strokeRect(iX - 34 - ond, iY - 34 - ond, iL + 68 + ond*2, iH + 68 + ond*2);
+    g.strokePoints(this.contourIle(38 + resp), true);
     g.lineStyle(3, COUL.ecume, 0.5);
-    g.strokeRect(iX - 18 - ond*0.5, iY - 18 - ond*0.5, iL + 36 + ond, iH + 36 + ond);
+    g.strokePoints(this.contourIle(26 + resp * 0.5), true);
 
-    // la plage puis l'herbe
+    // la côte en FESTONS : des rangées d'ellipses qui mordent le long des
+    // bords — organique, cullable, et fiable là où le remplissage WebGL
+    // d'un polygone de 120 sommets ne l'est pas
+    const feston = (marge, couleur, lx, ly) => {
+      g.fillStyle(couleur, 1);
+      const x0 = iX - marge, y0 = iY - marge;
+      const x1 = iX + iL + marge, y1 = iY + iH + marge;
+      const ond = k => Math.sin(k * 0.017) * 6 + Math.sin(k * 0.031) * 3;
+      for (let x = x0; x <= x1; x += 48){
+        if (visible(x, y0)) g.fillEllipse(x, y0 + ond(x), lx, ly);
+        if (visible(x, y1)) g.fillEllipse(x, y1 + ond(x + 999), lx, ly);
+      }
+      for (let y = y0; y <= y1; y += 48){
+        if (visible(x0, y)) g.fillEllipse(x0 + ond(y), y, ly, lx);
+        if (visible(x1, y)) g.fillEllipse(x1 + ond(y + 777), y, ly, lx);
+      }
+    };
+    // sable mouillé qui lèche l'eau, sable par-dessus, cœur de plage en aplat
+    feston(18, COUL.sableMouille, 58, 30);
+    feston(10, t.sable || COUL.sable, 60, 34);
     g.fillStyle(t.sable || COUL.sable, 1);
-    g.fillRect(iX - 12, iY - 12, iL + 24, iH + 24);
+    g.fillRect(iX - 10, iY - 10, iL + 20, iH + 20);
+    // l'herbe mord sur le sable, son cœur en aplat
+    feston(-46, t.herbe, 56, 30);
     g.fillStyle(t.herbe, 1);
     g.fillRect(iX + 46, iY + 46, iL - 92, iH - 92);
-    // touffes plus sombres, figées par un hachage
+
+    // le sol vivant, à plusieurs échelles, figé par des hachages.
+    // D'abord les taches d'herbe claire, larges, SOUS le reste
+    g.fillStyle(t.herbeClaire || COUL.herbeClaire, 1);
+    for (let i = 0; i < 50; i++){
+      const hx = iX + 70 + (Math.abs(Math.sin(i * 47.13)) * (iL - 140));
+      const hy = iY + 70 + (Math.abs(Math.sin(i * 23.71)) * (iH - 140));
+      if (visible(hx, hy)) g.fillEllipse(hx, hy, 40, 18);
+    }
+    // les touffes sombres
     g.fillStyle(t.herbeSombre, 1);
     for (let i = 0; i < 60; i++){
       const hx = iX + 60 + (Math.abs(Math.sin(i * 12.99)) * (iL - 120));
       const hy = iY + 60 + (Math.abs(Math.sin(i * 78.23)) * (iH - 120));
-      if (hx < vx || hx > vx + vl || hy < vy || hy > vy + vh) continue;
-      g.fillEllipse(hx, hy, 26, 12);
+      if (visible(hx, hy)) g.fillEllipse(hx, hy, 26, 12);
+    }
+    // quelques fleurs
+    for (let i = 0; i < 24; i++){
+      const hx = iX + 80 + (Math.abs(Math.sin(i * 91.7)) * (iL - 160));
+      const hy = iY + 80 + (Math.abs(Math.sin(i * 37.3)) * (iH - 160));
+      if (!visible(hx, hy)) continue;
+      g.fillStyle(i % 3 ? COUL.fleur : COUL.fleur2, 1);
+      g.fillCircle(hx, hy, 2.2); g.fillCircle(hx + 4, hy + 2, 1.6);
+    }
+    // coquillages et galets sur l'anneau de plage
+    for (let i = 0; i < 22; i++){
+      const hx = iX + 8 + (Math.abs(Math.sin(i * 63.29)) * (iL - 16));
+      const hy = iY + 8 + (Math.abs(Math.sin(i * 17.89)) * (iH - 16));
+      const bord = Math.min(hx - iX, iX + iL - hx, hy - iY, iY + iH - hy);
+      if (bord > 40 || !visible(hx, hy)) continue;
+      if (i % 2){
+        g.fillStyle(COUL.coquillage, 1);
+        g.fillEllipse(hx, hy, 5, 4);
+        g.fillStyle(COUL.sableOmbre, 1); g.fillCircle(hx, hy + 1, 1);
+      } else {
+        g.fillStyle(COUL.galet, 1); g.fillEllipse(hx, hy, 6, 4);
+      }
     }
   },
 
@@ -110,7 +177,7 @@ Object.assign(Aquad.prototype, {
   dessinerDecor(d){
     const g = d.g; g.clear();
     if (d.type === 'rocher'){
-      g.fillStyle(0x000000, 0.18); g.fillEllipse(d.x, d.y + 12, 48, 14);
+      g.fillStyle(0x000000, 0.18); g.fillEllipse(d.x + SOLEIL.x*1.5, d.y + 12 + SOLEIL.y*0.5, 48, 14);
       g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(d.x, d.y, 46, 34);
       g.fillStyle(COUL.rocher, 1); g.fillEllipse(d.x - 4, d.y - 6, 36, 24);
       g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(d.x - 10, d.y - 10, 14, 8);
@@ -119,7 +186,7 @@ Object.assign(Aquad.prototype, {
     // palmier : le pied au corps physique, la tête bien plus haut —
     // c'est le tri par y qui fait passer derrière ou devant
     const bal = Math.sin(d.phase) * 3;
-    g.fillStyle(0x000000, 0.18); g.fillEllipse(d.x + 14, d.y + 8, 52, 12);
+    g.fillStyle(0x000000, 0.18); g.fillEllipse(d.x + SOLEIL.x*3, d.y + 8 + SOLEIL.y, 52, 12);
     g.lineStyle(9, COUL.tronc, 1);
     g.beginPath(); g.moveTo(d.x, d.y + 4);
     g.lineTo(d.x + 6 + bal * 0.4, d.y - 46); g.strokePath();
@@ -146,7 +213,7 @@ Object.assign(Aquad.prototype, {
       const g = p.g; g.clear();
       g.setDepth(p.go.y);
       const x = p.go.x, y = p.go.y;
-      g.fillStyle(0x000000, 0.18); g.fillEllipse(x, y + 7, 20, 6);
+      g.fillStyle(0x000000, 0.18); g.fillEllipse(x + SOLEIL.x, y + 7 + SOLEIL.y*0.5, 20, 6);
       g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(x, y, 18, 13);
       g.fillStyle(COUL.rocher, 1); g.fillEllipse(x - 2, y - 2, 14, 9);
       g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(x - 4, y - 4, 6, 3);
@@ -158,7 +225,7 @@ Object.assign(Aquad.prototype, {
       const g = k.g; g.clear();
       g.setDepth(k.go.y);
       const x = k.go.x, y = k.go.y, clair = k.flash > 0;
-      g.fillStyle(0x000000, 0.2); g.fillEllipse(x, y + 12, 34, 10);
+      g.fillStyle(0x000000, 0.2); g.fillEllipse(x + SOLEIL.x, y + 12 + SOLEIL.y*0.5, 34, 10);
       g.fillStyle(clair ? 0xffffff : COUL.bois, 1);      g.fillRect(x-15, y-16, 30, 28);
       g.fillStyle(clair ? 0xffffff : COUL.boisClair, 1); g.fillRect(x-11, y-12, 22, 20);
       g.lineStyle(3, clair ? 0xffffff : COUL.boisOmbre, 1);
@@ -191,8 +258,8 @@ Object.assign(Aquad.prototype, {
     const eclaire = m.flash > 0 ? 0xffffff : (alerte ? 0xffe9b0 : null);
     const corps = eclaire || m.def.couleur;
     const ombre = eclaire || m.def.ombre;
-    // l'ombre = la boîte au sol du monstre
-    g.fillStyle(0x000000, 0.2); g.fillEllipse(x, y + 10*e, m.def.taille[0], 10*e);
+    // l'ombre = la boîte au sol du monstre, penchée comme toutes les autres
+    g.fillStyle(0x000000, 0.2); g.fillEllipse(x + SOLEIL.x, y + 10*e + SOLEIL.y*0.5, m.def.taille[0], 10*e);
     // pattes qui trottinent
     g.lineStyle(3*e, ombre, 1);
     for (const s of [-1, 1])
@@ -217,7 +284,7 @@ Object.assign(Aquad.prototype, {
     const x = m.go.x, y = m.go.y + Math.sin(m.phase) * 3;
     const eclaire = m.flash > 0 ? 0xffffff : null;
     const corps = eclaire || m.def.couleur;
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(x, m.go.y + 14*e, 26*e, 8*e);
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, m.go.y + 14*e + SOLEIL.y*0.5, 26*e, 8*e);
     // tentacules qui ondulent dessous
     g.lineStyle(2.5*e, eclaire || m.def.ombre, 0.9);
     for (let i = -2; i <= 2; i++){
@@ -311,7 +378,7 @@ Object.assign(Aquad.prototype, {
     // l'ombre fait exactement la largeur de la boîte au sol : c'est elle
     // qu'on regarde pour juger un contact. Elle reste collée au sol pendant
     // que le corps rebondit sur ses pas — le volume le moins cher du monde.
-    g.fillStyle(0x000000, 0.22); g.fillEllipse(0, 3, 26, 8);
+    g.fillStyle(0x000000, 0.22); g.fillEllipse(SOLEIL.x, 3 + SOLEIL.y*0.5, 26, 8);
     const lev = (marche && !j.attaque) ? Math.abs(Math.sin(t)) * 2 : 0;
     g.save();
     g.translateCanvas(0, -lev);
@@ -426,6 +493,8 @@ Object.assign(Aquad.prototype, {
     const g = this.gObjets; g.clear();
     for (const o of this.objets){
       const x = o.go.x, y = o.go.y + Math.sin(o.phase)*2.5;
+      // même les objets qui flottent projettent leur ombre au sol
+      g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, o.go.y + 12, 16, 5);
       if (o.type === 'vie'){
         const bat = Math.sin(o.phase * 2) * 2;
         g.fillStyle(0xffd166, 0.22); g.fillCircle(x, y, 17);
@@ -504,7 +573,7 @@ Object.assign(Aquad.prototype, {
       if (t.lance){
         // la pierre ou la caisse en vol, qui tournoie — dessinée plus
         // haut que sa position logique, comme jetée par-dessus la tête
-        g.fillStyle(0x000000, 0.15); g.fillEllipse(t.x, t.y + 10, 22, 6);
+        g.fillStyle(0x000000, 0.15); g.fillEllipse(t.x + SOLEIL.x, t.y + 10 + SOLEIL.y*0.5, 22, 6);
         g.save();
         g.translateCanvas(t.x, t.y - 16);
         g.rotateCanvas((0.9 - t.vie) * 9 * Math.sign(t.vx || 1));
