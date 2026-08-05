@@ -32,6 +32,17 @@ Object.assign(Combat.prototype, {
       g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
       g.fillTriangle(x-11, y, x+11, y, x, y+12);
     }
+    // jauge d'endurance : coups élastiques et doubles sauts y puisent
+    for (let i = 0; i < CFG.enduranceMax; i++){
+      const part = Phaser.Math.Clamp(this.endurance - i, 0, 1);
+      const x = 15 + i*26;
+      g.fillStyle(0x1c2440, 0.9); g.fillRect(x, 47, 22, 5);
+      if (part > 0){
+        g.fillStyle(part >= 1 ? 0x4dd6c1 : 0x2e7d6e, 1);
+        g.fillRect(x, 47, 22*part, 5);
+      }
+    }
+
     let t = this.def.nom + '   VIES ' + Math.max(0, PARTIE.vies)
           + '   MONSTRES ' + this.vaincus;
     if (this.arme) t += '   ' + ARMES[this.arme].nom + ' '
@@ -515,7 +526,7 @@ Object.assign(Combat.prototype, {
       const c = COUPS[this.attaque.type];
       const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
       const ext = Math.sin(Math.PI * Math.min(1, p * 1.2));
-      const ela = PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1;
+      const ela = this.attaque.elastique ? CFG.porteeElastique : 1;
       if (this.attaque.type === 'poing'){
         etB = ela;
         mains = [[-6 - ext*3, EPAULE + 9], [(4 + ext*22) * ela, EPAULE + 2 - ext*3]];
@@ -544,6 +555,23 @@ Object.assign(Combat.prototype, {
         etJ = ela;
         pieds = [[-4, 0], [balai*30*ela, -14 - Math.sin(Math.PI*p)*8]];
         inclinaison = -0.10 + p*0.20;
+      }
+    } else if (this.charge){
+      // le coup s'arme : membre replié, tremblement quand l'élastique est prêt
+      const k = Math.min(1, this.charge.t / CFG.seuilElastique);
+      const trem = this.charge.pret ? Math.sin(this.time.now / 30) * 1.2 : 0;
+      if (this.charge.action === 'pied'){
+        mains = [[-9, EPAULE + 4], [6, EPAULE + 10]];
+        pieds = [[-7, 0], [-1 - k*4 + trem, -6 - k*4]];
+        inclinaison = -0.08;
+      } else if (this.charge.action === 'retourne'){
+        mains = [[-10 - k*3 + trem, EPAULE + 6], [8, EPAULE + 8]];
+        pieds = [[-6, 0], [5, 0]];
+        inclinaison = -0.12 - k*0.06;
+      } else {
+        mains = [[-8, EPAULE + 8], [-2 - k*5 + trem, EPAULE + 4]];
+        pieds = [[-9, 0], [7, 0]];
+        inclinaison = -0.06 - k*0.04;
       }
     } else if (!auSol){
       pieds = b.velocity.y < 0 ? [[-7,-3],[7,-9]] : [[-8,-7],[9,-1]];
@@ -619,6 +647,15 @@ Object.assign(Combat.prototype, {
       g.fillStyle(a.clair, 1);   g.fillCircle(mains[1][0], my(1), 2.2);
     } else {
       g.fillStyle(COUL.ceinture, 1); g.fillCircle(mains[1][0], my(1), 2.6);
+    }
+
+    if (this.charge){
+      const k = Math.min(1, this.charge.t / CFG.seuilElastique);
+      const cx = this.charge.action === 'pied' ? pieds[1][0] : mains[1][0];
+      const cy = this.charge.action === 'pied' ? pieds[1][1] : my(1);
+      g.fillStyle(this.charge.pret ? 0xffd166 : 0x4dd6c1, 0.28 + 0.25*k);
+      g.fillCircle(cx, cy, 4 + k*5);
+      if (this.charge.pret){ g.fillStyle(0xffffff, 0.85); g.fillCircle(cx, cy, 2); }
     }
 
     const hx = 1, hy = TE;

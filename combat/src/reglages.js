@@ -25,8 +25,11 @@ const CFG = {
   rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
   segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
   segmentsMax:   5,     // réserve maximale de segments de rechange
-  maitrisePour:  3,     // monstres à vaincre d'un même coup pour le débloquer en élastique
-  porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât  // proportion de monstres vaincus qui lâchent un cœur
+  porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât
+  seuilElastique: 0.25, // tenir un coup au moins ce temps le rend élastique
+  chargeMax:     0.8,   // au-delà, le coup part tout seul
+  enduranceMax:  3,     // coups élastiques et doubles sauts puisent dedans
+  enduranceRegen: 0.9,  // et elle revient vite : vide → pleine en ~3 s  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
@@ -121,10 +124,5 @@ try {
   const d = localStorage.getItem('mgc-difficulte');
   if (DIFFICULTES[d]) DIFFICULTE_CHOISIE = d;
 } catch (e) {}
-
-const NOMS_ELASTIQUES = {
-  poing:'POING ÉLASTIQUE', pied:'PIED ÉLASTIQUE',
-  retourne:'RETOURNÉ ÉLASTIQUE', crochet:'UPPERCUT ÉLASTIQUE',
-};
 
 const HANCHE = -19, EPAULE = -30, TETE = -35;

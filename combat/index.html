@@ -94,6 +94,7 @@
     animation:halo 1.7s ease-in-out infinite;
   }
   .aide{margin-top:18px;font-size:9px;letter-spacing:.18em;color:#6a76a4}
+  .aide + .aide{margin-top:5px;color:#4dd6c1}
   .choix-diff{margin-top:14px;display:flex;gap:8px}
   .choix-diff button{
     font-family:'Arcade',ui-monospace,monospace;font-size:8px;letter-spacing:.05em;
@@ -214,6 +215,7 @@
   <div class="jeu">COMBAT</div>
   <div class="glyphes"><i class="g1">△</i><i class="g2">□</i><i class="g3">○</i><i class="g4">✕</i></div>
   <div class="aide">↑ UPPERCUT &nbsp;·&nbsp; ↓ RAMPER &nbsp;·&nbsp; ✕ SAUTER</div>
+  <div class="aide">TIENS UN COUP APPUYÉ → ÉLASTIQUE</div>
   <div class="choix-diff" id="choixDiff">
     <button data-d="facile">FACILE</button><button data-d="moyen">MOYEN</button><button data-d="difficile">DIFFICILE</button>
   </div>
@@ -258,7 +260,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '13';
+const VERSION = '14';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -314,8 +316,11 @@ const CFG = {
   rebondEcrase:  430,   // rebond quand on écrase une bestiole en retombant
   segmentsParBracelet: 3,  // un bracelet ramassé porte 3 segments d'énergie
   segmentsMax:   5,     // réserve maximale de segments de rechange
-  maitrisePour:  3,     // monstres à vaincre d'un même coup pour le débloquer en élastique
-  porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât  // proportion de monstres vaincus qui lâchent un cœur
+  porteeElastique: 1.65,// un coup élastique porte 65 % plus loin et fait +1 dégât
+  seuilElastique: 0.25, // tenir un coup au moins ce temps le rend élastique
+  chargeMax:     0.8,   // au-delà, le coup part tout seul
+  enduranceMax:  3,     // coups élastiques et doubles sauts puisent dedans
+  enduranceRegen: 0.9,  // et elle revient vite : vide → pleine en ~3 s  // proportion de monstres vaincus qui lâchent un cœur
 };
 
 // Les zones de coup sont mesurées depuis les PIEDS du personnage, comme
@@ -411,11 +416,6 @@ try {
   if (DIFFICULTES[d]) DIFFICULTE_CHOISIE = d;
 } catch (e) {}
 
-const NOMS_ELASTIQUES = {
-  poing:'POING ÉLASTIQUE', pied:'PIED ÉLASTIQUE',
-  retourne:'RETOURNÉ ÉLASTIQUE', crochet:'UPPERCUT ÉLASTIQUE',
-};
-
 const HANCHE = -19, EPAULE = -30, TETE = -35;
 
 // ═══════════════ src/niveaux.js ═══════════════
@@ -473,10 +473,7 @@ let PARTIE = null;
 function nouvellePartieEtat(){
   const D = DIFFICULTES[DIFFICULTE_CHOISIE] || DIFFICULTES.moyen;
   return { niveau:0, pv:CFG.pvJoueur, vies:D.vies, difficulte:DIFFICULTE_CHOISIE,
-           arme:null, munitions:0, segments:0, vaincus:0, morts:0,
-           // vaincre 3 monstres d'un même coup le débloque en élastique
-           maitrise:{ poing:0, pied:0, retourne:0, crochet:0 },
-           elastique:{ poing:false, pied:false, retourne:false, crochet:false } };
+           arme:null, munitions:0, segments:0, vaincus:0, morts:0 };
 }
 PARTIE = nouvellePartieEtat();
 
@@ -569,6 +566,7 @@ const SON = {
       case 'gagne':    [523,659,784,1047].forEach((f,i) => this.note('square', f, f, 0.2, 0.2, i*0.11)); break;
       case 'vide':     this.note('square', 160, 120, 0.06, 0.12); break;
       case 'ejecte':   this.note('square', 1100, 700, 0.07, 0.18); this.souffle(0.14, 0.32, 900, 1.2); break;
+      case 'tendu':    this.note('square', 620, 980, 0.09, 0.16); break;
       case 'competence':[523,784,1047,1568].forEach((f,i) => this.note('square', f, f, 0.13, 0.2, i*0.07)); break;
       case 'unevie':   [392,523,659,784,1047].forEach((f,i) => this.note('triangle', f, f, 0.16, 0.22, i*0.07)); break;
       case 'recharge': this.note('square', 500, 500, 0.05, 0.16); this.note('square', 950, 950, 0.06, 0.2, 0.08); break;
@@ -609,7 +607,10 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 const ENTREE = {
   axeX:0, saut:false, sautPresse:false, accroupi:false,
   haut:false, hautPresse:false, hautT:0,
-  coupPresse:null, coupT:0, validePresse:false,
+  // un coup se CHARGE tant que le bouton est tenu, et part au relâché :
+  // bref = coup normal, tenu = coup élastique (s'il reste de l'endurance)
+  chargeAction:null, chargeDebut:0, relache:null,
+  validePresse:false,
 };
 
 const socle = document.getElementById('socle');
@@ -669,11 +670,17 @@ for (const b of document.querySelectorAll('.pad button')){
     e.preventDefault();
     capturer(b, e.pointerId);
     if (a === 'saut'){ ENTREE.saut = true; ENTREE.sautPresse = true; }
-    else { ENTREE.coupPresse = a; ENTREE.coupT = performance.now(); }
+    else { ENTREE.chargeAction = a; ENTREE.chargeDebut = performance.now(); }
     ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
-  // relâcher ✕ écourte le saut : c'est ce qui le rend modulable
-  const fin = () => { if (a === 'saut') ENTREE.saut = false; };
+  // relâcher ✕ écourte le saut ; relâcher un coup le déclenche
+  const fin = () => {
+    if (a === 'saut'){ ENTREE.saut = false; return; }
+    if (ENTREE.chargeAction === a){
+      ENTREE.relache = { action:a, duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
+      ENTREE.chargeAction = null;
+    }
+  };
   for (const ev of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(ev, fin);
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
@@ -718,14 +725,21 @@ addEventListener('keydown', e => {
   if (e.code === 'Space' && !e.repeat){
     ENTREE.saut = true; ENTREE.sautPresse = true; ENTREE.validePresse = true; e.preventDefault();
   }
-  if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
-  if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
-  if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
+  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  if (touches[e.code] && !e.repeat){
+    ENTREE.chargeAction = touches[e.code]; ENTREE.chargeDebut = performance.now();
+    ENTREE.validePresse = true;
+  }
 });
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
   if (e.code === 'ArrowDown') ENTREE.accroupi = false;
   if (e.code === 'Space') ENTREE.saut = false;
+  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  if (touches[e.code] && ENTREE.chargeAction === touches[e.code]){
+    ENTREE.relache = { action:touches[e.code], duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
+    ENTREE.chargeAction = null;
+  }
 });
 
 // ═══════════════ src/moteur.js ═══════════════
@@ -755,6 +769,8 @@ class Combat extends Phaser.Scene {
     this.eclats = []; this.objets = []; this.caisses = [];
     this.tirs = []; this.tirsEnnemis = [];
     this.msg = null; this.transition = 0;
+    this.endurance = CFG.enduranceMax;
+    this.charge = null; this.chargeAIgnorer = null; this.astuceEndurance = false;
     this.sAvant = 0;
     majBoutonArme(this.arme, this.munitions, this.segments);
 
@@ -932,10 +948,10 @@ class Combat extends Phaser.Scene {
   }
 
   // ── combat ──────────────────────────────────────────────────
-  lancerAttaque(type){
+  lancerAttaque(type, elastique){
     if (this.attaque) return;
     const c = COUPS[type];
-    this.attaque = { type, t:0, bas:this.accroupi, touches:new Set() };
+    this.attaque = { type, t:0, bas:this.accroupi, elastique: !!elastique && !!c.portee, touches:new Set() };
     SON.jouer(c.son);
     if (c.secousse) this.cameras.main.shake(90, c.secousse);
     if (c.tir) this.tirer(c);
@@ -994,7 +1010,7 @@ class Combat extends Phaser.Scene {
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
     if (!c.portee) return [];
-    const portee = c.portee * (PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1);
+    const portee = c.portee * (this.attaque.elastique ? CFG.porteeElastique : 1);
     const dirs = c.bilateral ? [1, -1] : [this.sens];
     const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
     return dirs.map(d => {
@@ -1007,7 +1023,7 @@ class Combat extends Phaser.Scene {
     if (m.def.faible === 'haut') return !bas;
     return true;
   }
-  frapper(m, degats, recul, bas, sourceX, ecrase, origine){
+  frapper(m, degats, recul, bas, sourceX, ecrase){
     // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
     // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
     if (!ecrase && !this.vulnerable(m, bas)){
@@ -1040,23 +1056,11 @@ class Combat extends Phaser.Scene {
       // les deux cadeaux ne se confondent pas
       if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
       m.go.destroy();
-      this.progresser(origine);
       if (m.def.boss){
         this.bossVivant = false;
         if (m.def.final) this.gagnerPartie();
         else this.message(m.def.nom + ' EST À TERRE  —  LA SORTIE S\'OUVRE');
       }
-    }
-  }
-  // trois victoires avec le même coup : il devient élastique — portée
-  // accrue de 65 % et un dégât de plus
-  progresser(origine){
-    if (!origine || !(origine in PARTIE.maitrise) || PARTIE.elastique[origine]) return;
-    PARTIE.maitrise[origine]++;
-    if (PARTIE.maitrise[origine] >= CFG.maitrisePour){
-      PARTIE.elastique[origine] = true;
-      SON.jouer('competence');
-      this.message('✨ ' + NOMS_ELASTIQUES[origine] + ' DÉBLOQUÉ');
     }
   }
   casser(k, degats){
@@ -1215,6 +1219,8 @@ class Combat extends Phaser.Scene {
     this.pv = CFG.pvJoueur;
     this.invuln = CFG.invulnRenais;
     this.attaque = null;
+    this.charge = null;
+    this.endurance = CFG.enduranceMax;
     this.squash = 0;
     this.joueur.body.reset(this.checkpoint.x, this.checkpoint.y);
     this.piedsAvant = this.checkpoint.y + PIEDS;
@@ -1247,14 +1253,14 @@ class Combat extends Phaser.Scene {
         this.scene.restart();
         return;
       }
-      ENTREE.validePresse = false; ENTREE.coupPresse = null; ENTREE.hautPresse = false;
+      ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.hautPresse = false;
       this.majEclats(dt); this.dessinerTout(b);
       return;
     }
 
     if (this.etat !== 'jeu'){
       if (ENTREE.validePresse){
-        ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
+        ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.relache = null;
         ENTREE.hautPresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
         // le retour au titre détruit la partie : hors de la boucle de jeu,
@@ -1263,7 +1269,7 @@ class Combat extends Phaser.Scene {
         else this.recommencer();
         return;
       }
-      ENTREE.coupPresse = null; ENTREE.hautPresse = false; ENTREE.sautPresse = false;
+      ENTREE.relache = null; ENTREE.hautPresse = false; ENTREE.sautPresse = false;
       this.majEclats(dt); this.dessinerTout(b);
       return;
     }
@@ -1272,21 +1278,63 @@ class Combat extends Phaser.Scene {
     const auSol = b.blocked.down || b.touching.down;
     this.accroupi = ENTREE.accroupi && auSol;
 
-    // Les appuis d'attaque restent en réserve un court instant au lieu
-    // d'être avalés : taper pendant un coup en cours lançait... rien, et
-    // en rampant vers un monstre un appui sur deux disparaissait. Le
-    // coup suivant part dès que le bras est libre, comme pour le saut.
-    // l'expiration doit couvrir le plus long des coups (retourné, 620 ms),
-    // sinon presser au début d'un coup expirait avant la fin de celui-ci
+    // ── coups : un appui bref donne le coup normal ; TENIR le bouton
+    // charge le coup, qui part élastique au relâché s'il reste de
+    // l'endurance. Un appui-relâché pendant un coup en cours reste en
+    // réserve, le suivant part dès que le bras est libre.
     if (ENTREE.hautPresse && performance.now() - ENTREE.hautT > 700) ENTREE.hautPresse = false;
-    if (ENTREE.coupPresse && performance.now() - ENTREE.coupT > 700) ENTREE.coupPresse = null;
+    if (ENTREE.relache && performance.now() - ENTREE.relache.quand > 700) ENTREE.relache = null;
+    if (this.chargeAIgnorer && ENTREE.relache && ENTREE.relache.action === this.chargeAIgnorer){
+      // le relâché d'un coup déjà parti tout seul (ou d'un tir d'arme)
+      ENTREE.relache = null; this.chargeAIgnorer = null;
+    } else if (this.chargeAIgnorer && ENTREE.chargeAction !== this.chargeAIgnorer){
+      // le bouton à ignorer n'est plus tenu et son relâché est passé
+      this.chargeAIgnorer = null;
+    }
     if (!this.attaque){
-      if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
-      else if (ENTREE.coupPresse){
-        const coup = ENTREE.coupPresse;
-        ENTREE.coupPresse = null;
-        if (coup === 'poing' && this.arme) this.utiliserArme();
-        else this.lancerAttaque(coup);
+      if (ENTREE.hautPresse){
+        ENTREE.hautPresse = false; this.charge = null;
+        this.lancerAttaque('crochet');
+      } else if (ENTREE.chargeAction === 'poing' && this.arme && this.chargeAIgnorer !== 'poing'){
+        // une arme au poing tire dès l'appui — pas de charge, et tant que
+        // le bouton reste tenu son relâché est à ignorer
+        this.chargeAIgnorer = 'poing';
+        this.utiliserArme();
+      } else if (this.charge){
+        // la charge se mesure en temps RÉEL d'appui : le temps de la
+        // simulation se dilate quand la cadence d'images chute, et le
+        // seuil deviendrait faux exactement quand le jeu rame
+        this.charge.t = (performance.now() - this.charge.depuis) / 1000;
+        const tenu = ENTREE.chargeAction === this.charge.action;
+        if (!tenu || this.charge.t >= CFG.chargeMax){
+          // relâché — ou tenu jusqu'au maximum : le coup part tout seul
+          const action = this.charge.action;
+          const veutElast = this.charge.t >= CFG.seuilElastique;
+          const elast = veutElast && this.endurance >= 1;
+          if (elast) this.endurance -= 1;
+          else if (veutElast && !this.astuceEndurance){
+            this.astuceEndurance = true;
+            this.message("PLUS D'ENDURANCE — LA JAUGE REVIENT TOUTE SEULE");
+          }
+          if (tenu) this.chargeAIgnorer = action;   // son relâché est déjà consommé
+          ENTREE.relache = null;
+          this.charge = null;
+          this.lancerAttaque(action, elast);
+        } else if (!this.charge.pret && this.charge.t >= CFG.seuilElastique && this.endurance >= 1){
+          this.charge.pret = true;
+          SON.jouer('tendu');
+        }
+      } else if (ENTREE.chargeAction && ENTREE.chargeAction !== this.chargeAIgnorer){
+        // bouton tenu, éventuellement depuis le coup précédent : la
+        // charge reprend la durée réelle de l'appui
+        this.charge = { action: ENTREE.chargeAction, depuis: ENTREE.chargeDebut,
+          t: (performance.now() - ENTREE.chargeDebut)/1000, pret:false };
+      } else if (ENTREE.relache){
+        const r = ENTREE.relache; ENTREE.relache = null;
+        const elast = r.duree >= CFG.seuilElastique && this.endurance >= 1;
+        if (elast) this.endurance -= 1;
+        if (r.action === 'poing' && this.arme) this.utiliserArme();
+        else this.lancerAttaque(r.action, elast);
       }
     }
 
@@ -1300,8 +1348,8 @@ class Combat extends Phaser.Scene {
             if (m.mort || this.attaque.touches.has(m)) continue;
             if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, m.go.getBounds()))){
               this.attaque.touches.add(m);
-              this.frapper(m, c.degats + (PARTIE.elastique[this.attaque.type] ? 1 : 0),
-                c.recul, this.attaque.bas, this.joueur.x, false, this.attaque.type);
+              this.frapper(m, c.degats + (this.attaque.elastique ? 1 : 0),
+                c.recul, this.attaque.bas, this.joueur.x, false);
             }
           }
           for (const k of this.caisses){
@@ -1336,10 +1384,19 @@ class Combat extends Phaser.Scene {
       this.coyote = 0; this.buffer = 0; this.squash = -1;
       SON.jouer('saut');
     } else if (this.buffer > 0 && this.sautsAir > 0){
-      b.setVelocityY(-CFG.sautAerien);
-      this.sautsAir--; this.buffer = 0; this.squash = -1;
-      SON.jouer('saut2');
-      this.eclat(this.joueur.x, this.joueur.y + PIEDS, 0, 6, 0x9fb4ff);
+      if (this.endurance >= 1){
+        this.endurance -= 1;
+        b.setVelocityY(-CFG.sautAerien);
+        this.sautsAir--; this.buffer = 0; this.squash = -1;
+        SON.jouer('saut2');
+        this.eclat(this.joueur.x, this.joueur.y + PIEDS, 0, 6, 0x9fb4ff);
+      } else {
+        this.buffer = 0;
+        if (!this.astuceEndurance){
+          this.astuceEndurance = true;
+          this.message("PLUS D'ENDURANCE — LA JAUGE REVIENT TOUTE SEULE");
+        }
+      }
     }
     if (!ENTREE.saut && b.velocity.y < -CFG.coupureSaut) b.setVelocityY(-CFG.coupureSaut);
 
@@ -1348,6 +1405,7 @@ class Combat extends Phaser.Scene {
     this.squash += (0 - this.squash) * Math.min(1, dt * 12);
     if (auSol) this.phase += (Math.abs(b.velocity.x) * dt) / 27;
     this.invuln = Math.max(0, this.invuln - dt);
+    this.endurance = Math.min(CFG.enduranceMax, this.endurance + CFG.enduranceRegen * dt);
 
     // poussière à chaque appui de pied quand on court vite
     const sPhase = Math.sin(this.phase);
@@ -1573,6 +1631,17 @@ Object.assign(Combat.prototype, {
       g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
       g.fillTriangle(x-11, y, x+11, y, x, y+12);
     }
+    // jauge d'endurance : coups élastiques et doubles sauts y puisent
+    for (let i = 0; i < CFG.enduranceMax; i++){
+      const part = Phaser.Math.Clamp(this.endurance - i, 0, 1);
+      const x = 15 + i*26;
+      g.fillStyle(0x1c2440, 0.9); g.fillRect(x, 47, 22, 5);
+      if (part > 0){
+        g.fillStyle(part >= 1 ? 0x4dd6c1 : 0x2e7d6e, 1);
+        g.fillRect(x, 47, 22*part, 5);
+      }
+    }
+
     let t = this.def.nom + '   VIES ' + Math.max(0, PARTIE.vies)
           + '   MONSTRES ' + this.vaincus;
     if (this.arme) t += '   ' + ARMES[this.arme].nom + ' '
@@ -2056,7 +2125,7 @@ Object.assign(Combat.prototype, {
       const c = COUPS[this.attaque.type];
       const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
       const ext = Math.sin(Math.PI * Math.min(1, p * 1.2));
-      const ela = PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1;
+      const ela = this.attaque.elastique ? CFG.porteeElastique : 1;
       if (this.attaque.type === 'poing'){
         etB = ela;
         mains = [[-6 - ext*3, EPAULE + 9], [(4 + ext*22) * ela, EPAULE + 2 - ext*3]];
@@ -2085,6 +2154,23 @@ Object.assign(Combat.prototype, {
         etJ = ela;
         pieds = [[-4, 0], [balai*30*ela, -14 - Math.sin(Math.PI*p)*8]];
         inclinaison = -0.10 + p*0.20;
+      }
+    } else if (this.charge){
+      // le coup s'arme : membre replié, tremblement quand l'élastique est prêt
+      const k = Math.min(1, this.charge.t / CFG.seuilElastique);
+      const trem = this.charge.pret ? Math.sin(this.time.now / 30) * 1.2 : 0;
+      if (this.charge.action === 'pied'){
+        mains = [[-9, EPAULE + 4], [6, EPAULE + 10]];
+        pieds = [[-7, 0], [-1 - k*4 + trem, -6 - k*4]];
+        inclinaison = -0.08;
+      } else if (this.charge.action === 'retourne'){
+        mains = [[-10 - k*3 + trem, EPAULE + 6], [8, EPAULE + 8]];
+        pieds = [[-6, 0], [5, 0]];
+        inclinaison = -0.12 - k*0.06;
+      } else {
+        mains = [[-8, EPAULE + 8], [-2 - k*5 + trem, EPAULE + 4]];
+        pieds = [[-9, 0], [7, 0]];
+        inclinaison = -0.06 - k*0.04;
       }
     } else if (!auSol){
       pieds = b.velocity.y < 0 ? [[-7,-3],[7,-9]] : [[-8,-7],[9,-1]];
@@ -2162,6 +2248,15 @@ Object.assign(Combat.prototype, {
       g.fillStyle(COUL.ceinture, 1); g.fillCircle(mains[1][0], my(1), 2.6);
     }
 
+    if (this.charge){
+      const k = Math.min(1, this.charge.t / CFG.seuilElastique);
+      const cx = this.charge.action === 'pied' ? pieds[1][0] : mains[1][0];
+      const cy = this.charge.action === 'pied' ? pieds[1][1] : my(1);
+      g.fillStyle(this.charge.pret ? 0xffd166 : 0x4dd6c1, 0.28 + 0.25*k);
+      g.fillCircle(cx, cy, 4 + k*5);
+      if (this.charge.pret){ g.fillStyle(0xffffff, 0.85); g.fillCircle(cx, cy, 2); }
+    }
+
     const hx = 1, hy = TE;
     g.fillStyle(COUL.cheveux, 1);
     const pointes = [[-7,3],[-9,-3],[-13,-7],[-7,-6],[-10,-13],[-3,-8],[0,-15],[3,-7],[9,-11],[6,-3],[10,-4],[7,1]];
@@ -2207,7 +2302,7 @@ function demarrer(){
   document.body.classList.add('enjeu');
   SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
   ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false;
-  ENTREE.accroupi = false; ENTREE.coupPresse = null;
+  ENTREE.accroupi = false; ENTREE.chargeAction = null; ENTREE.relache = null;
   ENTREE.haut = false; ENTREE.hautPresse = false; ENTREE.validePresse = false;
   PARTIE = nouvellePartieEtat();
 

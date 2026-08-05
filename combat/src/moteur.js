@@ -24,6 +24,8 @@ class Combat extends Phaser.Scene {
     this.eclats = []; this.objets = []; this.caisses = [];
     this.tirs = []; this.tirsEnnemis = [];
     this.msg = null; this.transition = 0;
+    this.endurance = CFG.enduranceMax;
+    this.charge = null; this.chargeAIgnorer = null; this.astuceEndurance = false;
     this.sAvant = 0;
     majBoutonArme(this.arme, this.munitions, this.segments);
 
@@ -201,10 +203,10 @@ class Combat extends Phaser.Scene {
   }
 
   // ── combat ──────────────────────────────────────────────────
-  lancerAttaque(type){
+  lancerAttaque(type, elastique){
     if (this.attaque) return;
     const c = COUPS[type];
-    this.attaque = { type, t:0, bas:this.accroupi, touches:new Set() };
+    this.attaque = { type, t:0, bas:this.accroupi, elastique: !!elastique && !!c.portee, touches:new Set() };
     SON.jouer(c.son);
     if (c.secousse) this.cameras.main.shake(90, c.secousse);
     if (c.tir) this.tirer(c);
@@ -263,7 +265,7 @@ class Combat extends Phaser.Scene {
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
     if (!c.portee) return [];
-    const portee = c.portee * (PARTIE.elastique[this.attaque.type] ? CFG.porteeElastique : 1);
+    const portee = c.portee * (this.attaque.elastique ? CFG.porteeElastique : 1);
     const dirs = c.bilateral ? [1, -1] : [this.sens];
     const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
     return dirs.map(d => {
@@ -276,7 +278,7 @@ class Combat extends Phaser.Scene {
     if (m.def.faible === 'haut') return !bas;
     return true;
   }
-  frapper(m, degats, recul, bas, sourceX, ecrase, origine){
+  frapper(m, degats, recul, bas, sourceX, ecrase){
     // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
     // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
     if (!ecrase && !this.vulnerable(m, bas)){
@@ -309,23 +311,11 @@ class Combat extends Phaser.Scene {
       // les deux cadeaux ne se confondent pas
       if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
       m.go.destroy();
-      this.progresser(origine);
       if (m.def.boss){
         this.bossVivant = false;
         if (m.def.final) this.gagnerPartie();
         else this.message(m.def.nom + ' EST À TERRE  —  LA SORTIE S\'OUVRE');
       }
-    }
-  }
-  // trois victoires avec le même coup : il devient élastique — portée
-  // accrue de 65 % et un dégât de plus
-  progresser(origine){
-    if (!origine || !(origine in PARTIE.maitrise) || PARTIE.elastique[origine]) return;
-    PARTIE.maitrise[origine]++;
-    if (PARTIE.maitrise[origine] >= CFG.maitrisePour){
-      PARTIE.elastique[origine] = true;
-      SON.jouer('competence');
-      this.message('✨ ' + NOMS_ELASTIQUES[origine] + ' DÉBLOQUÉ');
     }
   }
   casser(k, degats){
@@ -484,6 +474,8 @@ class Combat extends Phaser.Scene {
     this.pv = CFG.pvJoueur;
     this.invuln = CFG.invulnRenais;
     this.attaque = null;
+    this.charge = null;
+    this.endurance = CFG.enduranceMax;
     this.squash = 0;
     this.joueur.body.reset(this.checkpoint.x, this.checkpoint.y);
     this.piedsAvant = this.checkpoint.y + PIEDS;
@@ -516,14 +508,14 @@ class Combat extends Phaser.Scene {
         this.scene.restart();
         return;
       }
-      ENTREE.validePresse = false; ENTREE.coupPresse = null; ENTREE.hautPresse = false;
+      ENTREE.validePresse = false; ENTREE.relache = null; ENTREE.hautPresse = false;
       this.majEclats(dt); this.dessinerTout(b);
       return;
     }
 
     if (this.etat !== 'jeu'){
       if (ENTREE.validePresse){
-        ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.coupPresse = null;
+        ENTREE.validePresse = false; ENTREE.sautPresse = false; ENTREE.relache = null;
         ENTREE.hautPresse = false;
         if (this.etat === 'perdu') this.reapparaitre();
         // le retour au titre détruit la partie : hors de la boucle de jeu,
@@ -532,7 +524,7 @@ class Combat extends Phaser.Scene {
         else this.recommencer();
         return;
       }
-      ENTREE.coupPresse = null; ENTREE.hautPresse = false; ENTREE.sautPresse = false;
+      ENTREE.relache = null; ENTREE.hautPresse = false; ENTREE.sautPresse = false;
       this.majEclats(dt); this.dessinerTout(b);
       return;
     }
@@ -541,21 +533,63 @@ class Combat extends Phaser.Scene {
     const auSol = b.blocked.down || b.touching.down;
     this.accroupi = ENTREE.accroupi && auSol;
 
-    // Les appuis d'attaque restent en réserve un court instant au lieu
-    // d'être avalés : taper pendant un coup en cours lançait... rien, et
-    // en rampant vers un monstre un appui sur deux disparaissait. Le
-    // coup suivant part dès que le bras est libre, comme pour le saut.
-    // l'expiration doit couvrir le plus long des coups (retourné, 620 ms),
-    // sinon presser au début d'un coup expirait avant la fin de celui-ci
+    // ── coups : un appui bref donne le coup normal ; TENIR le bouton
+    // charge le coup, qui part élastique au relâché s'il reste de
+    // l'endurance. Un appui-relâché pendant un coup en cours reste en
+    // réserve, le suivant part dès que le bras est libre.
     if (ENTREE.hautPresse && performance.now() - ENTREE.hautT > 700) ENTREE.hautPresse = false;
-    if (ENTREE.coupPresse && performance.now() - ENTREE.coupT > 700) ENTREE.coupPresse = null;
+    if (ENTREE.relache && performance.now() - ENTREE.relache.quand > 700) ENTREE.relache = null;
+    if (this.chargeAIgnorer && ENTREE.relache && ENTREE.relache.action === this.chargeAIgnorer){
+      // le relâché d'un coup déjà parti tout seul (ou d'un tir d'arme)
+      ENTREE.relache = null; this.chargeAIgnorer = null;
+    } else if (this.chargeAIgnorer && ENTREE.chargeAction !== this.chargeAIgnorer){
+      // le bouton à ignorer n'est plus tenu et son relâché est passé
+      this.chargeAIgnorer = null;
+    }
     if (!this.attaque){
-      if (ENTREE.hautPresse){ ENTREE.hautPresse = false; this.lancerAttaque('crochet'); }
-      else if (ENTREE.coupPresse){
-        const coup = ENTREE.coupPresse;
-        ENTREE.coupPresse = null;
-        if (coup === 'poing' && this.arme) this.utiliserArme();
-        else this.lancerAttaque(coup);
+      if (ENTREE.hautPresse){
+        ENTREE.hautPresse = false; this.charge = null;
+        this.lancerAttaque('crochet');
+      } else if (ENTREE.chargeAction === 'poing' && this.arme && this.chargeAIgnorer !== 'poing'){
+        // une arme au poing tire dès l'appui — pas de charge, et tant que
+        // le bouton reste tenu son relâché est à ignorer
+        this.chargeAIgnorer = 'poing';
+        this.utiliserArme();
+      } else if (this.charge){
+        // la charge se mesure en temps RÉEL d'appui : le temps de la
+        // simulation se dilate quand la cadence d'images chute, et le
+        // seuil deviendrait faux exactement quand le jeu rame
+        this.charge.t = (performance.now() - this.charge.depuis) / 1000;
+        const tenu = ENTREE.chargeAction === this.charge.action;
+        if (!tenu || this.charge.t >= CFG.chargeMax){
+          // relâché — ou tenu jusqu'au maximum : le coup part tout seul
+          const action = this.charge.action;
+          const veutElast = this.charge.t >= CFG.seuilElastique;
+          const elast = veutElast && this.endurance >= 1;
+          if (elast) this.endurance -= 1;
+          else if (veutElast && !this.astuceEndurance){
+            this.astuceEndurance = true;
+            this.message("PLUS D'ENDURANCE — LA JAUGE REVIENT TOUTE SEULE");
+          }
+          if (tenu) this.chargeAIgnorer = action;   // son relâché est déjà consommé
+          ENTREE.relache = null;
+          this.charge = null;
+          this.lancerAttaque(action, elast);
+        } else if (!this.charge.pret && this.charge.t >= CFG.seuilElastique && this.endurance >= 1){
+          this.charge.pret = true;
+          SON.jouer('tendu');
+        }
+      } else if (ENTREE.chargeAction && ENTREE.chargeAction !== this.chargeAIgnorer){
+        // bouton tenu, éventuellement depuis le coup précédent : la
+        // charge reprend la durée réelle de l'appui
+        this.charge = { action: ENTREE.chargeAction, depuis: ENTREE.chargeDebut,
+          t: (performance.now() - ENTREE.chargeDebut)/1000, pret:false };
+      } else if (ENTREE.relache){
+        const r = ENTREE.relache; ENTREE.relache = null;
+        const elast = r.duree >= CFG.seuilElastique && this.endurance >= 1;
+        if (elast) this.endurance -= 1;
+        if (r.action === 'poing' && this.arme) this.utiliserArme();
+        else this.lancerAttaque(r.action, elast);
       }
     }
 
@@ -569,8 +603,8 @@ class Combat extends Phaser.Scene {
             if (m.mort || this.attaque.touches.has(m)) continue;
             if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, m.go.getBounds()))){
               this.attaque.touches.add(m);
-              this.frapper(m, c.degats + (PARTIE.elastique[this.attaque.type] ? 1 : 0),
-                c.recul, this.attaque.bas, this.joueur.x, false, this.attaque.type);
+              this.frapper(m, c.degats + (this.attaque.elastique ? 1 : 0),
+                c.recul, this.attaque.bas, this.joueur.x, false);
             }
           }
           for (const k of this.caisses){
@@ -605,10 +639,19 @@ class Combat extends Phaser.Scene {
       this.coyote = 0; this.buffer = 0; this.squash = -1;
       SON.jouer('saut');
     } else if (this.buffer > 0 && this.sautsAir > 0){
-      b.setVelocityY(-CFG.sautAerien);
-      this.sautsAir--; this.buffer = 0; this.squash = -1;
-      SON.jouer('saut2');
-      this.eclat(this.joueur.x, this.joueur.y + PIEDS, 0, 6, 0x9fb4ff);
+      if (this.endurance >= 1){
+        this.endurance -= 1;
+        b.setVelocityY(-CFG.sautAerien);
+        this.sautsAir--; this.buffer = 0; this.squash = -1;
+        SON.jouer('saut2');
+        this.eclat(this.joueur.x, this.joueur.y + PIEDS, 0, 6, 0x9fb4ff);
+      } else {
+        this.buffer = 0;
+        if (!this.astuceEndurance){
+          this.astuceEndurance = true;
+          this.message("PLUS D'ENDURANCE — LA JAUGE REVIENT TOUTE SEULE");
+        }
+      }
     }
     if (!ENTREE.saut && b.velocity.y < -CFG.coupureSaut) b.setVelocityY(-CFG.coupureSaut);
 
@@ -617,6 +660,7 @@ class Combat extends Phaser.Scene {
     this.squash += (0 - this.squash) * Math.min(1, dt * 12);
     if (auSol) this.phase += (Math.abs(b.velocity.x) * dt) / 27;
     this.invuln = Math.max(0, this.invuln - dt);
+    this.endurance = Math.min(CFG.enduranceMax, this.endurance + CFG.enduranceRegen * dt);
 
     // poussière à chaque appui de pied quand on court vite
     const sPhase = Math.sin(this.phase);

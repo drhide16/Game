@@ -24,7 +24,10 @@ addEventListener('dblclick', e => e.preventDefault(), { passive:false });
 const ENTREE = {
   axeX:0, saut:false, sautPresse:false, accroupi:false,
   haut:false, hautPresse:false, hautT:0,
-  coupPresse:null, coupT:0, validePresse:false,
+  // un coup se CHARGE tant que le bouton est tenu, et part au relâché :
+  // bref = coup normal, tenu = coup élastique (s'il reste de l'endurance)
+  chargeAction:null, chargeDebut:0, relache:null,
+  validePresse:false,
 };
 
 const socle = document.getElementById('socle');
@@ -84,11 +87,17 @@ for (const b of document.querySelectorAll('.pad button')){
     e.preventDefault();
     capturer(b, e.pointerId);
     if (a === 'saut'){ ENTREE.saut = true; ENTREE.sautPresse = true; }
-    else { ENTREE.coupPresse = a; ENTREE.coupT = performance.now(); }
+    else { ENTREE.chargeAction = a; ENTREE.chargeDebut = performance.now(); }
     ENTREE.validePresse = true;   // n'importe quel bouton relance après une mort
   });
-  // relâcher ✕ écourte le saut : c'est ce qui le rend modulable
-  const fin = () => { if (a === 'saut') ENTREE.saut = false; };
+  // relâcher ✕ écourte le saut ; relâcher un coup le déclenche
+  const fin = () => {
+    if (a === 'saut'){ ENTREE.saut = false; return; }
+    if (ENTREE.chargeAction === a){
+      ENTREE.relache = { action:a, duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
+      ENTREE.chargeAction = null;
+    }
+  };
   for (const ev of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(ev, fin);
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
@@ -133,12 +142,19 @@ addEventListener('keydown', e => {
   if (e.code === 'Space' && !e.repeat){
     ENTREE.saut = true; ENTREE.sautPresse = true; ENTREE.validePresse = true; e.preventDefault();
   }
-  if (e.code === 'KeyA') { ENTREE.coupPresse = 'poing'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
-  if (e.code === 'KeyZ') { ENTREE.coupPresse = 'pied'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
-  if (e.code === 'KeyE') { ENTREE.coupPresse = 'retourne'; ENTREE.coupT = performance.now(); ENTREE.validePresse = true; }
+  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  if (touches[e.code] && !e.repeat){
+    ENTREE.chargeAction = touches[e.code]; ENTREE.chargeDebut = performance.now();
+    ENTREE.validePresse = true;
+  }
 });
 addEventListener('keyup', e => {
   if ((e.code === 'ArrowLeft' && ENTREE.axeX < 0) || (e.code === 'ArrowRight' && ENTREE.axeX > 0)) ENTREE.axeX = 0;
   if (e.code === 'ArrowDown') ENTREE.accroupi = false;
   if (e.code === 'Space') ENTREE.saut = false;
+  const touches = { KeyA:'poing', KeyZ:'pied', KeyE:'retourne' };
+  if (touches[e.code] && ENTREE.chargeAction === touches[e.code]){
+    ENTREE.relache = { action:touches[e.code], duree:(performance.now() - ENTREE.chargeDebut)/1000, quand:performance.now() };
+    ENTREE.chargeAction = null;
+  }
 });
