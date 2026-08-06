@@ -49,10 +49,11 @@ const COUPS = {
   jet:      { duree:0.30, debut:0, fin:0, portee:  0, hauteur: 0, dy:-40, degats:2, recul:260, elan:0, secousse:0.004, son:'ejecte', jet:true },
 };
 
+// nom : dans le HUD et les messages ; court : sur le bouton rond
 const ARMES = {
-  laser:    { nom:'LASER',    munitions:8,  couleur:0xc46bff, clair:0xe9b6ff },
-  pistolet: { nom:'PISTOLET', munitions:14, couleur:0xffd166, clair:0xfff0c2 },
-  fusil:    { nom:'FUSIL',    munitions:6,  couleur:0xff7b54, clair:0xffc2ac },
+  laser:    { nom:'AQUAMÉHA',     court:'AQUA',   munitions:8,  couleur:0xc46bff, clair:0xe9b6ff },
+  pistolet: { nom:'BOULE DE FEU', court:'FEU',    munitions:14, couleur:0xffd166, clair:0xfff0c2 },
+  fusil:    { nom:'TRIPLE FEU',   court:'TRIPLE', munitions:6,  couleur:0xff7b54, clair:0xffc2ac },
 };
 
 // Chaque bestiole n'est vulnérable qu'à une hauteur : c'est ce qui donne

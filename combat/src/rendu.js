@@ -432,7 +432,13 @@ Object.assign(Combat.prototype, {
     const nA = CADRES_PERSO[pref + 'Attaque'].length;
     const nV = CADRES_PERSO[pref + 'Va'].length;
     let anim, idx;
-    if (m.prepare > 0){ anim = pref + 'Attaque'; idx = 0; }   // il se ramasse
+    if (m.def.fixe){
+      // la tourelle : repos, visée qui cligne, flash au tir
+      if (m.tira > 0){ anim = pref + 'Attaque'; idx = nA - 1; }
+      else if (m.vise > 0){ anim = pref + 'Attaque'; idx = Math.floor(this.time.now / 130) % 2; }
+      else { anim = pref + 'Va'; idx = Math.floor(m.phase * 1.1) % nV; }
+    }
+    else if (m.prepare > 0){ anim = pref + 'Attaque'; idx = 0; }   // il se ramasse
     else if (m.assomme > 0){
       // sonné… ou en PLEINE CHARGE (le gardien passe assommé le temps
       // de son élan) : lancé à toute vitesse, c'est la frame de charge
