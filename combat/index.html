@@ -260,7 +260,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '15';
+const VERSION = '16';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -871,6 +871,7 @@ class Combat extends Phaser.Scene {
     const r = this.add.rectangle(x + w/2, SOL_Y + (H - SOL_Y)/2, w, H - SOL_Y, 0, 0);
     this.physics.add.existing(r, true);
     this.sols.add(r);
+    this.segmentsSol.push({ x0:x, x1:x + w });
 
     const degrade = this.def.decor === 'exterieur' && this.urbain(x) !== this.urbain(x + w);
     const pas = degrade ? 40 : w;
@@ -891,6 +892,25 @@ class Combat extends Phaser.Scene {
     p.body.checkCollision.left = false;
     p.body.checkCollision.right = false;
     this.plateformes.add(p);
+  }
+  // y a-t-il du sol sous ce x ? (les trous sont les intervalles laissés
+  // entre deux segments par le tirage)
+  solSous(x){
+    return this.segmentsSol.some(s => x >= s.x0 && x <= s.x1);
+  }
+  // un monstre quand même tombé dans un trou (recul en cloche, bond de
+  // charge...) n'est pas perdu : on le repêche sur le sol le plus proche.
+  // Avant, il était détruit en silence — un boss au fond d'un trou
+  // laissait la sortie verrouillée à jamais.
+  repecher(m){
+    let cx = m.go.x, mieux = Infinity;
+    for (const s of this.segmentsSol){
+      const p = Phaser.Math.Clamp(m.go.x, s.x0 + 40, s.x1 - 40);
+      const d = Math.abs(p - m.go.x);
+      if (d < mieux){ mieux = d; cx = p; }
+    }
+    m.go.body.reset(cx, m.baseY);
+    m.assomme = 0.6;
   }
   creerMonstre(type, x, minX, maxX){
     const d = MONSTRES[type];
@@ -933,6 +953,7 @@ class Combat extends Phaser.Scene {
   }
   construireNiveau(){
     const larg = this.largeur;
+    this.segmentsSol = [];
     this.creerSol(-200, 900);
     let x = 700;
     // dedans le sol est plus continu que dans la rue : on est dans un
@@ -1528,6 +1549,17 @@ class Combat extends Phaser.Scene {
         }
       }
 
+      // personne ne marche dans le vide : un marcheur au bord d'un trou
+      // s'arrête net et repart dans l'autre sens — poursuite, patrouille
+      // et glissade de recul comprises
+      if (!m.def.vole && !m.def.fixe && m.go.body.blocked.down){
+        const vx = m.go.body.velocity.x;
+        if (vx !== 0 && !this.solSous(m.go.x + Math.sign(vx) * (m.def.taille[0]/2 + 8))){
+          m.go.body.setVelocityX(0);
+          m.dir = -m.dir;
+        }
+      }
+
       // Retomber SUR une bestiole l'écrase au lieu de nous blesser.
       // Le test est un BALAYAGE du sommet, pas un chevauchement : en
       // pleine chute le corps avance de 50 px et plus par image, il peut
@@ -1550,7 +1582,7 @@ class Combat extends Phaser.Scene {
       } else if (Phaser.Geom.Intersects.RectangleToRectangle(this.joueur.getBounds(), m.go.getBounds())){
         this.blesser(m.go.x, m.def.degats);
       }
-      if (m.go.y > H + 200){ m.mort = true; m.go.destroy(); }
+      if (m.go.y > H + 200) this.repecher(m);
     }
   }
   majTourelle(m, dt, dx, memeNiveau){
