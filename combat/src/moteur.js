@@ -260,7 +260,8 @@ class Combat extends Phaser.Scene {
     this.attaque = { type, t:0, bas:this.accroupi, elastique: !!elastique && !!c.portee, touches:new Set() };
     if (this.attaque.elastique) this.crier(this.joueur.x, this.joueur.y - 32, CRIS.kiai, '#ffd166', 15);
     SON.jouer(c.son);
-    if (c.secousse) this.cameras.main.shake(90, c.secousse);
+    // pas de secousse ici : l'écran ne tremble qu'à l'IMPACT (frapper,
+    // casser) — un coup dans le vide ne secoue plus rien
     if (c.tir) this.tirer(c);
     if (c.jet) this.ejecterSegment(c);
     if (c.elan && this.joueur.body.blocked.down && !this.accroupi)
@@ -355,6 +356,7 @@ class Combat extends Phaser.Scene {
       m.go.body.setVelocity(dir * recul * (m.def.boss ? 0.35 : 1), m.def.vole ? 0 : -160);
     }
     SON.jouer('touche');
+    this.cameras.main.shake(90, ecrase ? 0.006 : 0.0045);
     this.eclat(m.go.x, m.go.y, dir);
     if (m.pv > 0) this.crier(m.go.x, hautCri, ecrase ? CRIS.ecrase : CRIS.coup);
     if (m.pv <= 0){
@@ -377,6 +379,7 @@ class Combat extends Phaser.Scene {
   casser(k, degats){
     k.pv -= degats; k.flash = 0.12;
     SON.jouer('caisse');
+    this.cameras.main.shake(70, 0.003);
     this.eclat(k.go.x, k.go.y - 4, this.sens, 5);
     if (k.pv <= 0){
       k.casse = true;
