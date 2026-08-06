@@ -4,6 +4,14 @@
 class Combat extends Phaser.Scene {
   constructor(){ super('combat'); }
 
+  preload(){
+    // l'atlas du héros vient d'une donnée base64 : le Loader sait la
+    // charger, et create() n'est appelé qu'une fois la texture prête.
+    // Aux étages suivants (scene.restart) elle est déjà là.
+    if (!this.textures.exists('persoAtlas'))
+      this.load.image('persoAtlas', ATLAS_PERSO);
+  }
+
   create(){
     this.def = NIVEAUX[Math.min(PARTIE.niveau, NIVEAUX.length - 1)];
     this.D = DIFFICULTES[PARTIE.difficulte] || DIFFICULTES.moyen;
@@ -47,6 +55,20 @@ class Combat extends Phaser.Scene {
     this.gMonstres = this.add.graphics().setDepth(4);
     this.gObjets   = this.add.graphics().setDepth(4.5);
     this.perso     = this.add.graphics().setDepth(5);
+    // le héros en pixel-art : on déclare chaque frame de l'atlas (une
+    // seule fois, la texture survit aux restarts), puis l'image qui les
+    // affichera et un petit pool de boules de feu pour les balles
+    const texPerso = this.textures.get('persoAtlas');
+    texPerso.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    for (const anim in CADRES_PERSO)
+      CADRES_PERSO[anim].forEach((c, i) => {
+        if (!texPerso.has(anim + i)) texPerso.add(anim + i, 0, c.x, c.y, c.w, c.h);
+      });
+    this.persoSpr = this.add.image(0, 0, 'persoAtlas', 'marche0').setDepth(5);
+    this.imgTirs = [];
+    for (let i = 0; i < 10; i++)
+      this.imgTirs.push(this.add.image(0, 0, 'persoAtlas', 'boule0')
+        .setDepth(7).setVisible(false).setScale(0.7));
     this.gEclats   = this.add.graphics().setDepth(6);
     this.gTirs     = this.add.graphics().setDepth(7);
     // huit textes recycles pour les onomatopees : creer un objet texte a
@@ -484,6 +506,7 @@ class Combat extends Phaser.Scene {
       + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
   }
   terminer(titre){
+    this.mortDebut = this.time.now;   // le sprite joue la chute une fois
     this.morts++;
     PARTIE.vies--;
     SON.jouer('mort');
