@@ -401,199 +401,89 @@ Object.assign(Aquad.prototype, {
 
   dessinerPerso(j){
     const g = j.g; g.clear();
+    const spr = j.spr;
     const PJ = this.iso(j.go.x, j.go.y);
-    g.setDepth(PJ.y);
+    g.setDepth(PJ.y); spr.setDepth(PJ.y);
     const b = j.go.body;
     const vitesse = Math.hypot(b.velocity.x, b.velocity.y);
     const marche = vitesse > 20;
     const allure = Math.min(1, vitesse / CFG.vitesse);
     const t = j.phase;
     // la direction DESSINÉE se juge À L'ÉCRAN : on projette le regard
-    // (ou le coup) — dos quand il monte à l'écran, face quand il descend,
-    // profil sur les côtés.
+    // (ou le coup) — dos quand il monte à l'écran, profil ailleurs. La
+    // vue de face n'a pas encore sa planche : elle retombe sur le profil.
     const dfx = j.attaque ? j.attaque.fx : j.fx;
     const dfy = j.attaque ? j.attaque.fy : j.fy;
     const sfx = (dfx - dfy) * ISO_C, sfy = (dfx + dfy) * ISO_S;
-    const vue = j.attaque ? 'profil'
-      : (Math.abs(sfy) * 2 > Math.abs(sfx) ? (sfy < 0 ? 'dos' : 'face') : 'profil');
-    const sens = (vue === 'profil' && sfx < -0.05) ? -1 : 1;
-    let pieds, mains, inclinaison = 0;
-
-    if (j.porte){
-      // les deux mains au-dessus de la tête, l'objet posé dessus
-      mains = [[-7, TETE - 7], [8, TETE - 7]];
-      if (marche){
-        const foulee = 5 + allure * 5;
-        pieds = [];
-        for (const dec of [Math.PI, 0]){
-          const p = t + dec, s = Math.sin(p);
-          pieds.push([-Math.cos(p)*foulee, Math.max(0, s) * -6]);
-        }
-      } else pieds = [[-6, 0], [6, 0]];
+    const vue = (Math.abs(sfy) * 2 > Math.abs(sfx) && sfy < 0) ? 'dos' : 'profil';
+    const sens = sfx < -0.05 ? -1 : 1;
+    const cadre = (anim, i) => {
+      const cs = CADRES_PERSO[anim];
+      const k = Phaser.Math.Clamp(i, 0, cs.length - 1);
+      return { nom: anim + k, c: cs[k] };
+    };
+    const courseK = Phaser.Math.Clamp((allure - 0.45) / 0.3, 0, 1);
+    let f;
+    if (this.etat === 'perdu' || this.etat === 'gameover'){
+      // à terre : la chute se joue une fois, puis on reste allongé
+      f = cadre('profil-mourir', Math.floor((this.time.now - (this.mortDebut || 0)) / 150));
+    } else if (j.porte){
+      // l'objet tenu à bout de bras : la pose du soulevé
+      f = cadre(vue + '-soulever', 2);
     } else if (j.attaque){
       const c = COUPS[j.attaque.type];
       const p = Phaser.Math.Clamp(j.attaque.t / c.duree, 0, 1);
-      const ext = Math.sin(Math.PI * Math.min(1, p * 1.2));
-      const ela = j.attaque.elastique ? CFG.porteeElastique : 1;
-      if (j.attaque.type === 'poing'){
-        mains = [[-6 - ext*3, EPAULE + 9], [(4 + ext*22) * ela, EPAULE + 2 - ext*3]];
-        pieds = [[-9, 0], [7, 0]];
-      } else if (j.attaque.type === 'pied'){
-        mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
-        pieds = [[-6, 0], [(6 + ext*26) * ela, -6 - ext*10]];
-      } else {
-        // arme : le bras tendu vers la cible
-        mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
-        pieds = [[-9, 0], [8, 0]];
-      }
+      const anim = (c.tir || c.faisceau) ? 'profil-tir'   // pas de tir de dos
+                 : vue + (j.attaque.type === 'pied' ? '-pied' : '-poing');
+      f = cadre(anim, Math.floor(p * CADRES_PERSO[anim].length));
     } else if (j.charge){
-      const k = Math.min(1, j.charge.t / CFG.seuilElastique);
-      const trem = j.charge.pret ? Math.sin(this.time.now / 30) * 1.2 : 0;
-      if (j.charge.action === 'pied'){
-        mains = [[-9, EPAULE + 4], [6, EPAULE + 10]];
-        pieds = [[-7, 0], [-1 - k*4 + trem, -6 - k*4]];
-      } else {
-        mains = [[-8, EPAULE + 8], [-2 - k*5 + trem, EPAULE + 4]];
-        pieds = [[-9, 0], [7, 0]];
-      }
-      inclinaison = -0.05;
+      f = cadre(vue + (j.charge.action === 'pied' ? '-pied' : '-poing'), 0);
+    } else if (j.invuln > CFG.invincibilite - 0.42 && j.invuln <= CFG.invincibilite){
+      // on vient d'encaisser : la grimace prime sur le reste
+      f = cadre('profil-recevoir', j.invuln > CFG.invincibilite - 0.2 ? 0 : 1);
     } else if (marche){
-      // deux vraies allures fondues par la vitesse : la MARCHE traîne son
-      // appui (60 % du cycle au sol), la COURSE le raccourcit (35 %) — il
-      // existe alors des instants où AUCUN pied ne touche : la suspension
-      const ph = t / (Math.PI * 2);
-      const course = Phaser.Math.Clamp((allure - 0.45) / 0.3, 0, 1);
-      const appui  = 0.6 - 0.25 * course;
-      const foulee = 6 + allure * 3 + course * 5;
-      const lever  = 5 + course * 7;
-      pieds = [ this.jambe(ph, foulee, lever, appui),
-                this.jambe(ph + 0.5, foulee, lever, appui) ];
-      mains = [];
-      for (const dec of [0.5, 0]){
-        const s = Math.sin((ph + dec) * Math.PI * 2);
-        // bras en balancier opposé aux jambes — tendus à la marche,
-        // PLIÉS qui pompent à la course (le coude sort via membre())
-        const mx = s * (5 + allure*4) * (1 - course*0.45);
-        const my = EPAULE + 12 - course * (6 + s*3) - Math.max(0, s)*(2 + allure*3);
-        mains.push([mx, my]);
-      }
-      inclinaison = 0.04 + allure*0.04 + course*0.09;
+      const anim = vue + (courseK > 0.5 ? '-course' : '-marche');
+      const n = CADRES_PERSO[anim].length;
+      // la phase avance avec la distance parcourue : pas de patinage
+      f = cadre(anim, Math.floor(((t / (Math.PI*2)) % 1) * n));
     } else {
-      const souffle = Math.sin(this.time.now / 420) * 1.2;
-      pieds = [[-6, 1], [6, 1]];
-      mains = [[-7, EPAULE + 11 + souffle], [8, EPAULE + 9 + souffle]];
+      f = vue === 'dos' ? cadre('dos-repos', 0) : cadre('profil-marche', 0);
     }
 
-    // l'ombre fait exactement la largeur de la boîte au sol : c'est elle
-    // qu'on regarde pour juger un contact. Elle reste collée au sol pendant
-    // que le corps rebondit sur ses pas — le volume le moins cher du monde.
     // le rebond du corps : deux minima par cycle, PILE sur les contacts
     let lev = 0;
     if (marche && !j.attaque){
       const phR = t / (Math.PI * 2);
-      const courseR = Phaser.Math.Clamp((allure - 0.45) / 0.3, 0, 1);
-      lev = (1.4 + courseR * 2.0) * (0.5 - 0.5 * Math.cos(phR * Math.PI * 4));
+      lev = (1.4 + courseK * 2.0) * (0.5 - 0.5 * Math.cos(phR * Math.PI * 4));
     }
-    // l'ombre respire avec le corps : large et sombre à l'appui, plus
-    // petite et plus claire quand il est en l'air — le signal de contact
+
+    spr.setTexture('persoAtlas', f.nom);
+    const flip = sens < 0;   // les planches regardent vers la droite
+    spr.setFlipX(flip);
+    spr.setOrigin(flip ? 1 - f.c.ox : f.c.ox, f.c.oy);
+    // à l'arrêt, un léger transfert de poids ; en marche, l'impact du
+    // pas écrase brièvement le corps sur son appui
+    const balance = (!marche && !j.attaque && !j.charge && !j.porte) ? Math.sin(this.time.now / 700) * 0.8 : 0;
+    let ex = 1, ey = 1;
+    if (marche && !j.attaque){
+      const c2 = 1 - Math.min(1, lev * 1.2);
+      if (c2 > 0){ ex = 1 + c2*0.04; ey = 1 - c2*0.06; }
+    }
+    spr.setPosition(PJ.x + balance, PJ.y + 14 - lev);
+    // léger écrasement vertical : la caméra est au-dessus, pas en face
+    spr.setScale(ECHELLE_PERSO * ex, ECHELLE_PERSO * 0.92 * ey);
+    spr.setAlpha(j.invuln > 0 && Math.floor(j.invuln*20) % 2 === 0 ? 0.35 : 1);
+
+    // l'ombre fait exactement la largeur de la boîte au sol : c'est elle
+    // qu'on regarde pour juger un contact. Elle respire avec le corps :
+    // large et sombre à l'appui, plus claire quand il est en l'air.
     g.fillStyle(COUL.ombrePortee, 0.3 - lev*0.035);
     g.fillEllipse(SOLEIL.x, 3 + SOLEIL.y*0.5, 26 - lev*1.5, 8 - lev*0.4);
-    g.save();
-    // à l'arrêt, un léger transfert de poids ; en marche, l'impact du pas
-    // écrase brièvement le corps sur son appui
-    const balance = (!marche && !j.attaque && !j.charge && !j.porte) ? Math.sin(this.time.now / 700) * 0.8 : 0;
-    g.translateCanvas(balance, -lev);
-    if (marche && !j.attaque){
-      const c = 1 - Math.min(1, lev * 1.2);
-      if (c > 0) g.scaleCanvas(1 + c*0.04, 1 - c*0.06);
-    }
-    // pendant un coup, le corps reste DEBOUT : juste un penché plafonné
-    // vers la frappe — la fente, le membre tendu et l'ellipse au sol
-    // disent déjà la direction
-    if (j.attaque){
-      const angEcran = sens === 1 ? Math.atan2(sfy, sfx) : Math.atan2(sfy, -sfx);
-      g.rotateCanvas(Phaser.Math.Clamp(angEcran, -0.3, 0.3));
-    }
 
-    this.membre(g, -1, EPAULE, mains[0][0], mains[0][1], 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
-    this.membre(g, -1, HANCHE, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
-    g.fillStyle(0x171d33, 1); g.fillEllipse(pieds[0][0]+1, pieds[0][1]-1.5, 10, 6);
-
-    // le torse est plus étroit vu de profil
-    const larg = vue === 'profil' ? 5 : 7;
-    g.fillStyle(COUL.gi, 1);
-    g.fillPoints([{x:-larg,y:EPAULE},{x:larg,y:EPAULE},{x:larg-1,y:HANCHE+1},{x:-(larg-1),y:HANCHE+1}], true);
-    // le modelé : lumière au nord-ouest, ombre au sud-est — le même soleil
-    // que les ombres portées
-    g.fillStyle(0x000000, 0.10);
-    g.fillPoints([{x:larg-2.5,y:EPAULE},{x:larg,y:EPAULE},{x:larg-1,y:HANCHE+1},{x:larg-3.5,y:HANCHE+1}], true);
-    g.fillStyle(0xffffff, 0.10);
-    g.fillPoints([{x:-larg,y:EPAULE},{x:-larg+2.5,y:EPAULE},{x:-larg+3.5,y:HANCHE+1},{x:-(larg-1),y:HANCHE+1}], true);
-    g.lineStyle(2.4, COUL.col, 1);
-    if (vue === 'face'){
-      g.beginPath(); g.moveTo(-3, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
-      g.beginPath(); g.moveTo(5, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
-    } else if (vue === 'dos'){
-      g.beginPath(); g.moveTo(-4, EPAULE); g.lineTo(4, EPAULE); g.strokePath();
-    } else {
-      g.beginPath(); g.moveTo(1, EPAULE-1); g.lineTo(3.5, EPAULE+7); g.strokePath();
-    }
-    g.fillStyle(COUL.ceinture, 1);
-    g.fillRect(-larg, HANCHE-3, larg*2, 4);
-    if (vue === 'dos') g.fillRect(-2, HANCHE-5, 4, 8);   // le nœud, dans le dos
-
-    const bras2 = j.attaque && j.attaque.type === 'poing' && j.attaque.elastique ? CFG.porteeElastique : 1;
-    const jambe2 = j.attaque && j.attaque.type === 'pied' && j.attaque.elastique ? CFG.porteeElastique : 1;
-    this.membre(g, 1, HANCHE, pieds[1][0], pieds[1][1], 9.5*jambe2, 9.5*jambe2, -1, COUL.gi, COUL.gi, 9, 7.5);
-    g.fillStyle(COUL.botte, 1); g.fillEllipse(pieds[1][0]+1, pieds[1][1]-1.5, 11, 6.4);
-    this.membre(g, 1, EPAULE, mains[1][0], mains[1][1], 8*bras2, 8*bras2, 1, COUL.gi, COUL.peau, 7.5, 5.5);
-    if (j.arme){
-      const a = ARMES[j.arme];
-      g.fillStyle(a.couleur, 1); g.fillCircle(mains[1][0], mains[1][1], 4.4);
-      g.fillStyle(a.clair, 1);   g.fillCircle(mains[1][0], mains[1][1], 2.2);
-    } else {
-      g.fillStyle(COUL.ceinture, 1); g.fillCircle(mains[1][0], mains[1][1], 2.6);
-    }
-
-    if (j.charge){
-      const k = Math.min(1, j.charge.t / CFG.seuilElastique);
-      const cx = j.charge.action === 'pied' ? pieds[1][0] : mains[1][0];
-      const cy = j.charge.action === 'pied' ? pieds[1][1] : mains[1][1];
-      g.fillStyle(j.charge.pret ? 0xffd166 : 0x4dd6c1, 0.28 + 0.25*k);
-      g.fillCircle(cx, cy, 4 + k*5);
-      if (j.charge.pret){ g.fillStyle(0xffffff, 0.85); g.fillCircle(cx, cy, 2); }
-    }
-
-    // la tête, grosse comme il faut vu d'en haut, change avec la vue
-    const hx = 1, hy = TETE;
-    const pointes = [[-7,3],[-9,-3],[-13,-7],[-7,-6],[-10,-13],[-3,-8],[0,-15],[3,-7],[9,-11],[6,-3],[10,-4],[7,1]];
-    const rec = vue === 'profil' ? -2 : 0;   // cheveux balayés vers l'arrière
-    g.fillStyle(COUL.cheveux, 1);
-    g.fillPoints(pointes.map(p => ({ x: hx + p[0]*1.15 + rec, y: hy + p[1]*1.15 })), true);
-    g.fillStyle(COUL.peau, 1); g.fillCircle(hx+1, hy, 6.6);
-    g.fillStyle(COUL.cheveux, 1);
-    if (vue === 'dos'){
-      // de dos : la chevelure couvre toute la tête, la nuque dépasse en bas
-      g.fillCircle(hx+1, hy-1.4, 6.6);
-      g.fillEllipse(hx+1, hy-5, 13.4, 6.4);
-    } else if (vue === 'face'){
-      g.fillEllipse(hx+0.5, hy-5.2, 13.4, 5.8);
-      g.fillStyle(0x1a0f22, 1);
-      g.fillRect(hx-4.2, hy-1.4, 2, 2.6);
-      g.fillRect(hx+2.6, hy-1.4, 2, 2.6);
-    } else {
-      g.fillEllipse(hx-1, hy-5.2, 13.4, 5.8);
-      g.fillStyle(0x1a0f22, 1);
-      g.fillRect(hx+3.4, hy-1.4, 2, 2.6);   // un seul œil, tourné vers l'avant
-    }
-    // l'ombre douce sous le menton, côté opposé au soleil
-    g.fillStyle(0x000000, 0.08); g.fillEllipse(hx + 3, hy + 3.6, 7, 3.6);
-
-    // l'objet porté, posé sur les mains levées
+    // l'objet porté, posé sur les mains levées du sprite
     if (j.porte){
-      const oy = TETE - 12 + Math.sin(this.time.now / 300) * 1.2;
+      const oy = TETE - 16 - lev + Math.sin(this.time.now / 300) * 1.2;
       if (j.porte.type === 'caisse'){
-        // le même cube que par terre, en plus petit, posé sur les mains
         this.cube(g, 0, oy, 24, 15, COUL.boisClair, COUL.bois, COUL.boisOmbre);
         g.lineStyle(2, COUL.boisOmbre, 1);
         g.beginPath(); g.moveTo(-12, oy - 15); g.lineTo(12, oy - 15); g.strokePath();
@@ -604,13 +494,22 @@ Object.assign(Aquad.prototype, {
       }
     }
 
-    g.restore();
+    // la lueur du coup qui s'arme, devant le corps
+    if (j.charge){
+      const k = Math.min(1, j.charge.t / CFG.seuilElastique);
+      const cx = sens * 11, cy = j.charge.action === 'pied' ? -8 : -24;
+      g.fillStyle(j.charge.pret ? 0xffd166 : 0x4dd6c1, 0.28 + 0.25*k);
+      g.fillCircle(cx, cy, 4 + k*5);
+      if (j.charge.pret){ g.fillStyle(0xffffff, 0.85); g.fillCircle(cx, cy, 2); }
+    }
+
     g.setPosition(PJ.x, PJ.y + 12);
-    g.setRotation(sens * inclinaison);
-    // léger écrasement vertical : la caméra est au-dessus, pas en face
-    g.setScale(sens, 0.92);
-    g.setAlpha(j.invuln > 0 && Math.floor(j.invuln*20) % 2 === 0 ? 0.35 : 1);
+    // l'ombre ne se retourne PAS avec le regard : le soleil est commun
+    g.setScale(1, 0.92);
+    g.setRotation(0);
+    g.setAlpha(1);
   },
+
   membre(g, hx, hy, tx, ty, l1, l2, sens, c1, c2, e1, e2){
     const dx = tx-hx, dy = ty-hy;
     const d = Math.min(Math.hypot(dx, dy), l1+l2-0.001) || 0.001;
@@ -719,6 +618,7 @@ Object.assign(Aquad.prototype, {
         gC.restore();
       }
     }
+    let bi = 0;
     for (const t of this.tirs){
       if (t.lance){
         // la pierre ou la caisse en vol, qui tournoie — dessinée plus
@@ -748,10 +648,13 @@ Object.assign(Aquad.prototype, {
         g.fillStyle(t.clair || 0xffffff, 0.95); g.fillCircle(P.x, P.y, 2.2);
         continue;
       }
-      g.fillStyle(t.couleur, 0.25); g.fillCircle(P.x, P.y, 7);
-      g.fillStyle(t.couleur, 1);    g.fillCircle(P.x, P.y, 3.5);
-      g.fillStyle(0xffffff, 0.9);   g.fillCircle(P.x, P.y, 1.6);
+      // la balle est la boule de feu de la planche ; le miroir suit la
+      // direction À L'ÉCRAN du vol
+      const img = this.imgTirs[bi++];
+      if (img) img.setVisible(true).setPosition(P.x, P.y - 8)
+                  .setFlipX((t.vx - t.vy) * ISO_C < 0);
     }
+    for (let i = bi; i < this.imgTirs.length; i++) this.imgTirs[i].setVisible(false);
   },
 
   dessinerHud(){
