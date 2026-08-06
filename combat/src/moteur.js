@@ -794,6 +794,22 @@ class Combat extends Phaser.Scene {
               this.casser(k, c.degats);
             }
           }
+          // BLOQUER un tir de tourelle au corps : un coup qui croise le
+          // pruneau le renvoie à l'expéditeur, comme la boule de feu
+          for (const e of this.tirsEnnemis){
+            if (e.fini || this.attaque.touches.has(e)) continue;
+            const be = new Phaser.Geom.Rectangle(e.x - 10, e.y - 10, 20, 20);
+            if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, be))){
+              this.attaque.touches.add(e);
+              e.fini = true;
+              this.tirs.push({ x:e.x, y:e.y, vx:-e.vx*1.35, vy:-e.vy*0.5,
+                               degats:2, recul:170, bas:false, vie:1.6 });
+              SON.jouer('touche');
+              this.eclat(e.x, e.y, Math.sign(-e.vx) || 1, 10, 0xffd166);
+              this.crier(e.x, e.y - 16, ['CONTRÉ !'], '#ffd166', 14);
+              this.cameras.main.shake(70, 0.004);
+            }
+          }
         }
       }
       if (this.attaque.t >= c.duree) this.attaque = null;
@@ -1011,7 +1027,7 @@ class Combat extends Phaser.Scene {
       // c'est la tourelle qui encaisse son propre pruneau
       if (!t.jet) for (const e of this.tirsEnnemis){
         if (e.fini) continue;
-        if (Math.abs(t.x - e.x) < 16 && Math.abs(t.y - e.y) < 16){
+        if (Math.abs(t.x - e.x) < 24 && Math.abs(t.y - e.y) < 24){
           e.fini = true;
           this.tirs.push({ x:e.x, y:e.y, vx:-e.vx*1.35, vy:-e.vy*0.5,
                            degats:2, recul:170, bas:false, vie:1.6 });

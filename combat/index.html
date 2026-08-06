@@ -260,7 +260,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '27';
+const VERSION = '28';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -329,11 +329,11 @@ const PIEDS = 20;
 const DECALAGE_ACCROUPI = 16;
 
 const COUPS = {
-  poing:    { duree:0.26, debut:0.05, fin:0.14, portee: 26, hauteur:32, dy:-40, degats:1, recul:210, elan: 40, secousse:0.004, son:'poing' },
+  poing:    { duree:0.20, debut:0.04, fin:0.12, portee: 26, hauteur:32, dy:-40, degats:1, recul:210, elan: 40, secousse:0.004, son:'poing' },
   pied:     { duree:0.44, debut:0.13, fin:0.27, portee: 36, hauteur:34, dy:-34, degats:2, recul:360, elan:120, secousse:0.009, son:'pied' },
   crochet:  { duree:0.30, debut:0.07, fin:0.17, portee: 26, hauteur:38, dy:-54, degats:2, recul:260, elan:  0, secousse:0.007, son:'poing' },
   retourne: { duree:0.62, debut:0.20, fin:0.40, portee: 34, hauteur:40, dy:-34, degats:3, recul:430, elan:  0, secousse:0.013, son:'retourne', bilateral:true },
-  laser:    { duree:0.34, debut:0.06, fin:0.13, portee:520, hauteur:20, dy:-40, degats:3, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
+  laser:    { duree:0.52, debut:0.18, fin:0.30, portee:520, hauteur:20, dy:-40, degats:2, recul:300, elan:0, secousse:0.011, son:'laser', faisceau:true },
   pistolet: { duree:0.20, debut:0.05, fin:0.06, portee:  0, hauteur: 0, dy:-40, degats:2, recul:180, elan:0, secousse:0.005, son:'pistolet', tir:{ nb:1, vitesse:820, dispersion:0 } },
   fusil:    { duree:0.52, debut:0.07, fin:0.08, portee:  0, hauteur: 0, dy:-38, degats:2, recul:320, elan:0, secousse:0.014, son:'fusil',    tir:{ nb:3, vitesse:700, dispersion:0.13 } },
   // l'éjection du segment usé : le rechargement est lui-même une attaque
@@ -352,10 +352,10 @@ const ARMES = {
 const MONSTRES = {
   baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:0.25, vol:0,  faible:'bas',  silhouette:'brute' },
   drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:1, vol:46, faible:'haut', silhouette:'drone', vole:true },
-  colosse: { pv:6,  taille:[38,44], vitesse: 52, patrouille:30, degats:2, vol:0,  faible:null,   silhouette:'brute', gros:true },
+  colosse: { pv:6,  taille:[52,68], vitesse: 52, patrouille:30, degats:2, vol:0,  faible:null,   silhouette:'brute', gros:true },
   // le gardien annonce son coup : il se ramasse, puis se détend d'un bloc
-  gardien: { pv:4,  taille:[28,40], vitesse:120, patrouille:70, degats:1, vol:0,  faible:null,   silhouette:'gardien',
-             charge:{ portee:210, preparation:0.45, elan:430, repos:1.9 } },
+  gardien: { pv:6,  taille:[28,40], vitesse:120, patrouille:70, degats:1, vol:0,  faible:null,   silhouette:'gardien',
+             charge:{ portee:210, preparation:0.4, elan:470, repos:1.4 } },
   // la tourelle ne bouge pas, elle vise et tire — avec un temps de visée
   tourelle:{ pv:3,  taille:[30,28], vitesse:0,   patrouille:0,  degats:1, vol:0,  faible:null,   silhouette:'tourelle',
              fixe:true, canon:{ portee:430, visee:0.75, repos:2.1, vitesse:430 } },
@@ -448,7 +448,10 @@ const SPRITES_MONSTRES = {
   baveux:      { pref:'bav',   k:1.35 },
   grandBaveux: { pref:'bav',   k:1.35 },
   drone:       { pref:'drone', k:1.55 },
-  colosse:     { pref:'col',   k:2.1 },
+  colosse:     { pref:'col',   k:1.35 },
+  cogneur:     { pref:'col',   k:1.35 },
+  broyeur:     { pref:'col',   k:1.35 },
+  patron:      { pref:'col',   k:1.45 },
   gardien:     { pref:'gar',   k:1.3 },
   chefSecu:    { pref:'gar',   k:1.3 },
   scorpion:    { pref:'gar',   k:1.3 },
@@ -1596,6 +1599,22 @@ class Combat extends Phaser.Scene {
               this.casser(k, c.degats);
             }
           }
+          // BLOQUER un tir de tourelle au corps : un coup qui croise le
+          // pruneau le renvoie à l'expéditeur, comme la boule de feu
+          for (const e of this.tirsEnnemis){
+            if (e.fini || this.attaque.touches.has(e)) continue;
+            const be = new Phaser.Geom.Rectangle(e.x - 10, e.y - 10, 20, 20);
+            if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, be))){
+              this.attaque.touches.add(e);
+              e.fini = true;
+              this.tirs.push({ x:e.x, y:e.y, vx:-e.vx*1.35, vy:-e.vy*0.5,
+                               degats:2, recul:170, bas:false, vie:1.6 });
+              SON.jouer('touche');
+              this.eclat(e.x, e.y, Math.sign(-e.vx) || 1, 10, 0xffd166);
+              this.crier(e.x, e.y - 16, ['CONTRÉ !'], '#ffd166', 14);
+              this.cameras.main.shake(70, 0.004);
+            }
+          }
         }
       }
       if (this.attaque.t >= c.duree) this.attaque = null;
@@ -1813,7 +1832,7 @@ class Combat extends Phaser.Scene {
       // c'est la tourelle qui encaisse son propre pruneau
       if (!t.jet) for (const e of this.tirsEnnemis){
         if (e.fini) continue;
-        if (Math.abs(t.x - e.x) < 16 && Math.abs(t.y - e.y) < 16){
+        if (Math.abs(t.x - e.x) < 24 && Math.abs(t.y - e.y) < 24){
           e.fini = true;
           this.tirs.push({ x:e.x, y:e.y, vx:-e.vx*1.35, vy:-e.vy*0.5,
                            degats:2, recul:170, bas:false, vie:1.6 });
