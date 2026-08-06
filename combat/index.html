@@ -260,7 +260,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '26';
+const VERSION = '27';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -350,7 +350,7 @@ const ARMES = {
 // Chaque bestiole n'est vulnérable qu'à une hauteur : c'est ce qui donne
 // son intérêt à l'accroupissement et à l'uppercut.
 const MONSTRES = {
-  baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:1, vol:0,  faible:'bas',  silhouette:'brute' },
+  baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:0.25, vol:0,  faible:'bas',  silhouette:'brute' },
   drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:1, vol:46, faible:'haut', silhouette:'drone', vole:true },
   colosse: { pv:6,  taille:[38,44], vitesse: 52, patrouille:30, degats:2, vol:0,  faible:null,   silhouette:'brute', gros:true },
   // le gardien annonce son coup : il se ramasse, puis se détend d'un bloc
@@ -448,7 +448,7 @@ const SPRITES_MONSTRES = {
   baveux:      { pref:'bav',   k:1.35 },
   grandBaveux: { pref:'bav',   k:1.35 },
   drone:       { pref:'drone', k:1.55 },
-  colosse:     { pref:'col',   k:1.7 },
+  colosse:     { pref:'col',   k:2.1 },
   gardien:     { pref:'gar',   k:1.3 },
   chefSecu:    { pref:'gar',   k:1.3 },
   scorpion:    { pref:'gar',   k:1.3 },
@@ -1222,12 +1222,16 @@ class Combat extends Phaser.Scene {
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
     if (!c.portee) return [];
-    const portee = c.portee * (this.attaque.elastique ? CFG.porteeElastique : 1);
+    let portee = c.portee * (this.attaque.elastique ? CFG.porteeElastique : 1);
+    // accroupi, la frappe balaie plus large et plus haut au ras du sol :
+    // toucher les rampants ne doit pas demander une précision d'orfèvre
+    const haut = this.attaque.bas ? c.hauteur * 1.5 : c.hauteur;
+    if (this.attaque.bas) portee += 8;
     const dirs = c.bilateral ? [1, -1] : [this.sens];
     const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
     return dirs.map(d => {
       const cx = this.joueur.x + d * (14 + portee/2);
-      return new Phaser.Geom.Rectangle(cx - portee/2, y - c.hauteur/2, portee, c.hauteur);
+      return new Phaser.Geom.Rectangle(cx - portee/2, y - haut/2, portee, haut);
     });
   }
   vulnerable(m, bas){
@@ -1239,15 +1243,19 @@ class Combat extends Phaser.Scene {
     // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
     // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
     if (!ecrase && !this.vulnerable(m, bas)){
+      // coup bloqué : l'éclat et le son suffisent — pas d'onomatopée
+      // pour un coup qui ne touche pas
       m.blinde = 0.18;
       SON.jouer('blinde');
       this.eclat(m.go.x, m.go.y, 0, 3, COUL.blinde);
-      this.crier(m.go.x, m.go.y - m.def.taille[1]/2 - 14, CRIS.blinde, '#9fb4ff', 14);
-      if (m.def.faible === 'bas' && !this.astuceBas){
-        this.astuceBas = true;
-        this.message("ACCROUPIS-TOI POUR TOUCHER LE VIOLET");
-      } else if (m.def.faible === 'haut' && !this.astuceHaut){
-        this.astuceHaut = true;
+      // et tant qu'on insiste debout, l'astuce revient (toutes les 4 s)
+      if (m.def.faible === 'bas'
+          && (this.astuceBasT === undefined || this.time.now > this.astuceBasT + 4000)){
+        this.astuceBasT = this.time.now;
+        this.message('ACCROUPIS-TOI (↓) POUR TOUCHER LE VIOLET');
+      } else if (m.def.faible === 'haut'
+          && (this.astuceHautT === undefined || this.time.now > this.astuceHautT + 4000)){
+        this.astuceHautT = this.time.now;
         this.message('LE DRONE VOLE TROP HAUT, RELÈVE-TOI');
       }
       return;
@@ -1910,7 +1918,10 @@ Object.assign(Combat.prototype, {
   dessinerHud(){
     const g = this.hud; g.clear();
     for (let i = 0; i < CFG.pvJoueur; i++){
-      g.fillStyle(i < this.pv ? 0xe2584d : 0x2a3355, 1);
+      // les dégâts sont fractionnaires (le baveux pince par quarts) :
+      // le cœur entamé pâlit avec ce qui lui reste
+      const part = Phaser.Math.Clamp(this.pv - i, 0, 1);
+      g.fillStyle(part > 0 ? 0xe2584d : 0x2a3355, part > 0 ? 0.3 + 0.7 * part : 1);
       const x = 26 + i*26, y = 32;
       g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
       g.fillTriangle(x-11, y, x+11, y, x, y+12);

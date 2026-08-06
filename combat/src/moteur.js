@@ -420,12 +420,16 @@ class Combat extends Phaser.Scene {
   zonesAttaque(){
     const c = COUPS[this.attaque.type];
     if (!c.portee) return [];
-    const portee = c.portee * (this.attaque.elastique ? CFG.porteeElastique : 1);
+    let portee = c.portee * (this.attaque.elastique ? CFG.porteeElastique : 1);
+    // accroupi, la frappe balaie plus large et plus haut au ras du sol :
+    // toucher les rampants ne doit pas demander une précision d'orfèvre
+    const haut = this.attaque.bas ? c.hauteur * 1.5 : c.hauteur;
+    if (this.attaque.bas) portee += 8;
     const dirs = c.bilateral ? [1, -1] : [this.sens];
     const y = this.joueur.y + PIEDS + c.dy + (this.attaque.bas ? DECALAGE_ACCROUPI : 0);
     return dirs.map(d => {
       const cx = this.joueur.x + d * (14 + portee/2);
-      return new Phaser.Geom.Rectangle(cx - portee/2, y - c.hauteur/2, portee, c.hauteur);
+      return new Phaser.Geom.Rectangle(cx - portee/2, y - haut/2, portee, haut);
     });
   }
   vulnerable(m, bas){
@@ -437,15 +441,19 @@ class Combat extends Phaser.Scene {
     // l'écrasement vient du dessus : la règle des hauteurs ne s'applique
     // qu'aux coups horizontaux, on retombe sur n'importe quelle bestiole
     if (!ecrase && !this.vulnerable(m, bas)){
+      // coup bloqué : l'éclat et le son suffisent — pas d'onomatopée
+      // pour un coup qui ne touche pas
       m.blinde = 0.18;
       SON.jouer('blinde');
       this.eclat(m.go.x, m.go.y, 0, 3, COUL.blinde);
-      this.crier(m.go.x, m.go.y - m.def.taille[1]/2 - 14, CRIS.blinde, '#9fb4ff', 14);
-      if (m.def.faible === 'bas' && !this.astuceBas){
-        this.astuceBas = true;
-        this.message("ACCROUPIS-TOI POUR TOUCHER LE VIOLET");
-      } else if (m.def.faible === 'haut' && !this.astuceHaut){
-        this.astuceHaut = true;
+      // et tant qu'on insiste debout, l'astuce revient (toutes les 4 s)
+      if (m.def.faible === 'bas'
+          && (this.astuceBasT === undefined || this.time.now > this.astuceBasT + 4000)){
+        this.astuceBasT = this.time.now;
+        this.message('ACCROUPIS-TOI (↓) POUR TOUCHER LE VIOLET');
+      } else if (m.def.faible === 'haut'
+          && (this.astuceHautT === undefined || this.time.now > this.astuceHautT + 4000)){
+        this.astuceHautT = this.time.now;
         this.message('LE DRONE VOLE TROP HAUT, RELÈVE-TOI');
       }
       return;
