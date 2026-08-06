@@ -29,7 +29,10 @@ Object.assign(Combat.prototype, {
   dessinerHud(){
     const g = this.hud; g.clear();
     for (let i = 0; i < CFG.pvJoueur; i++){
-      g.fillStyle(i < this.pv ? 0xe2584d : 0x2a3355, 1);
+      // les dégâts sont fractionnaires (le baveux pince par quarts) :
+      // le cœur entamé pâlit avec ce qui lui reste
+      const part = Phaser.Math.Clamp(this.pv - i, 0, 1);
+      g.fillStyle(part > 0 ? 0xe2584d : 0x2a3355, part > 0 ? 0.3 + 0.7 * part : 1);
       const x = 26 + i*26, y = 32;
       g.fillCircle(x-5, y-3, 6); g.fillCircle(x+5, y-3, 6);
       g.fillTriangle(x-11, y, x+11, y, x, y+12);

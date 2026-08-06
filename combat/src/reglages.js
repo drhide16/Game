@@ -59,7 +59,7 @@ const ARMES = {
 // Chaque bestiole n'est vulnérable qu'à une hauteur : c'est ce qui donne
 // son intérêt à l'accroupissement et à l'uppercut.
 const MONSTRES = {
-  baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:1, vol:0,  faible:'bas',  silhouette:'brute' },
+  baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:0.25, vol:0,  faible:'bas',  silhouette:'brute' },
   drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:1, vol:46, faible:'haut', silhouette:'drone', vole:true },
   colosse: { pv:6,  taille:[38,44], vitesse: 52, patrouille:30, degats:2, vol:0,  faible:null,   silhouette:'brute', gros:true },
   // le gardien annonce son coup : il se ramasse, puis se détend d'un bloc
