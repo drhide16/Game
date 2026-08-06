@@ -19,6 +19,14 @@ const ISO_C = 0.7071, ISO_S = 0.3536;
 class Aquad extends Phaser.Scene {
   constructor(){ super('aquad'); }
 
+  preload(){
+    // l'atlas du héros vient d'une donnée base64 : le Loader sait la
+    // charger, et create() n'est appelé qu'une fois la texture prête.
+    // Aux zones suivantes (scene.restart) elle est déjà là.
+    if (!this.textures.exists('persoAtlas'))
+      this.load.image('persoAtlas', ATLAS_PERSO);
+  }
+
   iso(x, y){ return { x: (x - y) * ISO_C, y: (x + y) * ISO_S }; }
   // l'inverse : d'un vecteur écran vers un vecteur monde (pour le joystick)
   isoInv(px, py){ return { x: px / (2*ISO_C) + py / (2*ISO_S), y: -px / (2*ISO_C) + py / (2*ISO_S) }; }
@@ -129,8 +137,23 @@ class Aquad extends Phaser.Scene {
       endurance: CFG.enduranceMax,
       attaque: null, charge: null, chargeAIgnorer: null,
       porte: null,                  // la pierre ou la caisse au-dessus de la tête
-      g: this.add.graphics(),       // son calque de dessin, trié par y
+      g: this.add.graphics(),       // ombre, objet porté, lueur — trié par y
+      spr: null,                    // le corps : une frame de l'atlas pixel-art
     };
+    // les frames de l'atlas, déclarées une seule fois (la texture
+    // survit aux restarts), puis l'image du héros et un petit pool de
+    // boules de feu pour les balles des armes
+    const texPerso = this.textures.get('persoAtlas');
+    texPerso.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    for (const anim in CADRES_PERSO)
+      CADRES_PERSO[anim].forEach((c, i) => {
+        if (!texPerso.has(anim + i)) texPerso.add(anim + i, 0, c.x, c.y, c.w, c.h);
+      });
+    j.spr = this.add.image(0, 0, 'persoAtlas', 'profil-marche0');
+    this.imgTirs = [];
+    for (let i = 0; i < 10; i++)
+      this.imgTirs.push(this.add.image(0, 0, 'persoAtlas', 'boule0')
+        .setDepth(4200).setVisible(false).setScale(0.55));
     this.physics.add.existing(j.go);
     j.go.body.setCollideWorldBounds(true);
     this.joueurs = [j];
@@ -530,6 +553,7 @@ class Aquad extends Phaser.Scene {
     this.hudFin.setText('Tu embarques\n\n' + suivant.nom + '\n' + suivant.sous);
   }
   terminer(titre){
+    this.mortDebut = this.time.now;   // le sprite joue la chute une fois
     this.morts++;
     PARTIE.vies--;
     SON.jouer('mort');
