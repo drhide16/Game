@@ -10,6 +10,8 @@ class Combat extends Phaser.Scene {
     // Aux étages suivants (scene.restart) elle est déjà là.
     if (!this.textures.exists('persoAtlas'))
       this.load.image('persoAtlas', ATLAS_PERSO);
+    if (!this.textures.exists('decorAtlas'))
+      this.load.image('decorAtlas', ATLAS_DECOR);
   }
 
   create(){
@@ -75,6 +77,20 @@ class Combat extends Phaser.Scene {
     for (let i = 0; i < 6; i++)
       this.imgCadavres.push(this.add.image(0, 0, 'persoAtlas', 'bavMort0')
         .setDepth(3.6).setVisible(false));
+    // les décors : frames déclarées, et un pool d'images de FOND en
+    // espace écran (la parallaxe est calculée à la main, comme le
+    // dessin de this.fond)
+    const texDec = this.textures.get('decorAtlas');
+    texDec.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    for (const nomD in CADRES_DECOR){
+      const cD = CADRES_DECOR[nomD];
+      if (!texDec.has(nomD)) texDec.add(nomD, 0, cD.x, cD.y, cD.w, cD.h);
+    }
+    this.imgFond = [];
+    for (let i = 0; i < 44; i++)
+      this.imgFond.push(this.add.image(0, 0, 'decorAtlas', 'sapin1')
+        .setScrollFactor(0).setDepth(-9).setVisible(false));
+    this.fondN = 0;
     this.gEclats   = this.add.graphics().setDepth(6);
     this.gTirs     = this.add.graphics().setDepth(7);
     // huit textes recycles pour les onomatopees : creer un objet texte a
@@ -144,14 +160,18 @@ class Combat extends Phaser.Scene {
     this.sols.add(r);
     this.segmentsSol.push({ x0:x, x1:x + w });
 
-    const degrade = this.def.decor === 'exterieur' && this.urbain(x) !== this.urbain(x + w);
-    const pas = degrade ? 40 : w;
-    for (let sx = x; sx < x + w; sx += pas){
-      const lw = Math.min(pas, x + w - sx);
-      const [c, cb] = this.couleurSol(sx + lw/2);
-      this.add.rectangle(sx + lw/2, SOL_Y + (H - SOL_Y)/2, lw + 1, H - SOL_Y, c).setDepth(-5);
-      this.add.rectangle(sx + lw/2, SOL_Y + 2, lw + 1, 4, cb).setDepth(-4);
-    }
+    // la tuile de sol pixel-art, répétée sur la largeur du segment ;
+    // les brins d'herbe dépassent un peu au-dessus de la ligne de sol
+    const nomSol = this.def.decor === 'interieur' ? 'solMetal'
+                 : this.def.decor === 'toit' ? 'solGravier'
+                 : (this.def.decor === 'villeJour'
+                    || (this.def.decor === 'exterieur' && this.urbain(x + w/2) > 0.5)) ? 'solVille'
+                 : 'solHerbe';
+    const cs = CADRES_DECOR[nomSol];
+    this.add.tileSprite(x + w/2, SOL_Y - 8 + cs.h/2, w, cs.h, 'decorAtlas', nomSol).setDepth(-5);
+    // et la nuit sous la tuile, jusqu'en bas du monde
+    const yT = SOL_Y - 8 + cs.h;
+    this.add.rectangle(x + w/2, yT + 300, w, 600, 0x120d1c).setDepth(-5.1);
   }
   creerPlateforme(x, y, w){
     const t = this.def.teinte;
@@ -264,6 +284,30 @@ class Combat extends Phaser.Scene {
     // le boss garde la sortie : elle reste verrouillée tant qu'il tient
     this.boss = this.creerMonstre(this.def.boss, this.sortieX - 190, x + 60, this.sortieX - 40);
     this.bossVivant = true;
+
+    // les accessoires de décor posés sur les segments : la forêt a ses
+    // feuillus et buissons, la ville son mobilier
+    const props = this.def.decor === 'foret' ? ['feuillu','buisson','souche','herbes','buisson']
+                : (this.def.decor === 'villeJour' || this.def.decor === 'exterieur')
+                  ? ['lampadaire','poubelle','feuTricolore','borne'] : null;
+    if (props){
+      for (const s of this.segmentsSol){
+        for (let px = s.x0 + 150; px < s.x1 - 90; px += 400 + Math.abs(Math.sin(px)) * 260){
+          const nomP = props[Math.floor(Math.abs(Math.sin(px * 0.37)) * props.length) % props.length];
+          const e = nomP === 'feuillu' ? 0.85 : 0.6;
+          this.add.image(px, SOL_Y + 2, 'decorAtlas', nomP)
+            .setOrigin(0.5, 1).setScale(e).setDepth(1.5);
+        }
+      }
+    }
+    // la sortie en image quand la planche l'a (échelle, ascenseur)
+    if (this.def.sortie === 'echelle'){
+      this.imgSortie = this.add.image(this.sortieX, SOL_Y + 2, 'decorAtlas', 'echelle')
+        .setOrigin(0.5, 1).setScale(210 / CADRES_DECOR.echelle.h).setDepth(-3);
+    } else if (this.def.sortie === 'ascenseur'){
+      this.imgSortie = this.add.image(this.sortieX, SOL_Y + 2, 'decorAtlas', 'ascenseur')
+        .setOrigin(0.5, 1).setScale(150 / CADRES_DECOR.ascenseur.h).setDepth(-3);
+    } else this.imgSortie = null;
   }
 
   // ── combat ──────────────────────────────────────────────────

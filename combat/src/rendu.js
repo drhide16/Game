@@ -9,12 +9,14 @@ Object.assign(Combat.prototype, {
   // ── rendu ───────────────────────────────────────────────────
   dessinerTout(b){
     const sx = this.cameras.main.scrollX;
+    this.fondN = 0;
     if (this.def.decor === 'interieur') this.dessinerInterieur(sx);
     else if (this.def.decor === 'toit') this.dessinerToit(sx);
     else if (this.def.decor === 'foret') this.dessinerForet(sx);
     else if (this.def.decor === 'desert') this.dessinerDesert(sx);
     else if (this.def.decor === 'villeJour') this.dessinerVilleJour(sx);
     else this.dessinerDehors(sx);
+    for (let i = this.fondN; i < this.imgFond.length; i++) this.imgFond[i].setVisible(false);
     this.dessinerSortie();
     this.dessinerCaisses();
     this.dessinerMonstres();
@@ -118,7 +120,17 @@ Object.assign(Combat.prototype, {
     g.fillStyle(0xffb347, 0.14 - 0.07*u); g.fillCircle(730, 140, 70);
     if (u < 1) this.collines(g, sx*0.12, 0x1d2547, 42, 250, 1 - u);
     this.pylones(g, sx*0.35, this.melange(0x151c38, 0x1a1230, u));
-    if (u > 0) this.immeubles(g, sx*0.45, u, 128, 120, 185);
+    if (u > 0){
+      // les immeubles de la planche, fenêtres allumées, montent avec
+      // l'entrée en ville
+      const pas = 240, debut = Math.floor(sx*0.45/pas) - 1;
+      for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
+        const x = i*pas - sx*0.45;
+        const v = 1 + (Math.abs(i * 5) % 3);
+        const e = 1.1 + Math.abs(Math.sin(i*7.13)) * 0.6;
+        this.poserFond('immeuble' + v, x, SOL_Y + 4, e, u, 0x8f86b8, -8.7);
+      }
+    }
     if (u < 1) this.collines(g, sx*0.55, 0x111730, 26, 320, 1 - u);
   },
   dessinerInterieur(sx){
@@ -166,26 +178,41 @@ Object.assign(Combat.prototype, {
       g.fillStyle(t.neon, 0.9);  g.fillRect(x, 36, 84, 6);
     }
   },
+  // pose une image de fond du pool (espace écran, parallaxe manuelle)
+  poserFond(frame, x, y, e, alpha, tint, depth){
+    const img = this.imgFond[this.fondN++];
+    if (!img) return;
+    img.setVisible(true).setTexture('decorAtlas', frame)
+       .setOrigin(0.5, 1).setPosition(x, y).setScale(e)
+       .setAlpha(alpha).setDepth(depth);
+    if (tint != null) img.setTint(tint); else img.clearTint();
+  },
   dessinerForet(sx){
     // petit matin : ciel laiteux, soleil bas, trois rangées de sapins
-    // du plus pâle (loin) au plus sombre (près)
+    // en pixel-art — voilés au loin, francs au premier plan
     const g = this.fond; g.clear();
     g.fillGradientStyle(0xa8d8d0, 0xa8d8d0, 0xe8f0d8, 0xe8f0d8, 1);
     g.fillRect(0, 0, L, SOL_Y);
-    g.fillStyle(0xfff2c0, 0.18); g.fillCircle(190, 92, 80);
+    // le soleil reste dessiné : son halo doux n'a pas de bord de case
+    g.fillStyle(0xfff2c0, 0.18); g.fillCircle(190, 92, 84);
     g.fillStyle(0xfff2c0, 0.55); g.fillCircle(190, 92, 44);
-    this.sapins(g, sx*0.15, 0x9bbf8e, 306, 62, 92);
-    this.sapins(g, sx*0.32, 0x6fa06b, 340, 88, 122);
-    this.sapins(g, sx*0.55, 0x497a52, 378, 118, 152);
+    // deux nuages qui dérivent avec le temps et la caméra
+    for (let i = 0; i < 3; i++){
+      const nx = (((i * 430 + 120 - sx * 0.08 - this.time.now * 0.004) % (L + 320)) + L + 320) % (L + 320) - 160;
+      this.poserFond(i % 2 ? 'nuage2' : 'nuage1', nx, 96 + i * 34, 0.55, 0.85, null, -8.85);
+    }
+    this.sapinsImg(sx*0.15, 306, 0.45, 0xbcd4bc, -8.8);
+    this.sapinsImg(sx*0.32, 340, 0.62, 0xdfeadf, -8.7);
+    this.sapinsImg(sx*0.55, 380, 0.85, null, -8.6);
   },
-  sapins(g, off, couleur, base, h, pas){
+  sapinsImg(off, base, e, tint, depth){
+    const pas = 150;
     const debut = Math.floor(off/pas) - 1;
-    g.fillStyle(couleur, 1);
     for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
-      const x = i*pas - off + (i % 3) * 14;
-      const hh = h * (0.75 + Math.abs(Math.sin(i*12.99)) * 0.5);
-      g.fillTriangle(x - hh*0.42, base, x + hh*0.42, base, x, base - hh);
-      g.fillTriangle(x - hh*0.34, base - hh*0.34, x + hh*0.34, base - hh*0.34, x, base - hh*1.28);
+      const x = i*pas - off + (i % 3) * 16;
+      const v = 1 + (Math.abs(i * 7) % 3);   // sapin1..3, figé par case
+      const hh = e * (0.8 + Math.abs(Math.sin(i*12.99)) * 0.4);
+      this.poserFond('sapin' + v, x, base, hh, 1, tint, depth);
     }
   },
   dessinerDesert(sx){
@@ -214,10 +241,9 @@ Object.assign(Combat.prototype, {
     g.fillGradientStyle(0x9fd3ef, 0x9fd3ef, 0xdcedf7, 0xdcedf7, 1);
     g.fillRect(0, 0, L, SOL_Y);
     const pasN = 300, dN = Math.floor(sx*0.08/pasN) - 1;
-    g.fillStyle(0xffffff, 0.8);
     for (let i = dN; i < dN + Math.ceil(L/pasN) + 3; i++){
       const x = i*pasN - sx*0.08, y = 58 + (i % 3) * 34;
-      g.fillEllipse(x, y, 90, 22); g.fillEllipse(x+34, y-8, 60, 18);
+      this.poserFond(i % 2 ? 'nuage2' : 'nuage1', x, y + 24, 0.6, 0.9, null, -8.85);
     }
     this.batimentsClairs(g, sx*0.3, 0xb9c8d8, 0x8fa2b8, 150, 60, 130);
     this.batimentsClairs(g, sx*0.55, 0x94a8bc, 0x6d8098, 120, 100, 170);
@@ -300,15 +326,8 @@ Object.assign(Combat.prototype, {
     const pulse = bloquee ? 0 : 0.55 + 0.45 * Math.sin(this.time.now / 260);
 
     if (this.def.sortie === 'echelle'){
-      g.fillStyle(0x0a0d18, 0.9); g.fillRect(x - 30, sol - 210, 60, 210);
-      g.lineStyle(5, 0x8f9ad0, 1);
-      g.beginPath(); g.moveTo(x - 14, sol); g.lineTo(x - 14, sol - 200); g.strokePath();
-      g.beginPath(); g.moveTo(x + 14, sol); g.lineTo(x + 14, sol - 200); g.strokePath();
-      g.lineStyle(4, 0xb7c0ee, 1);
-      for (let y = sol - 12; y > sol - 200; y -= 22){
-        g.beginPath(); g.moveTo(x - 14, y); g.lineTo(x + 14, y); g.strokePath();
-      }
-      g.fillStyle(0x4dd6c1, 0.3 + 0.3*pulse); g.fillTriangle(x, sol - 216, x - 13, sol - 200, x + 13, sol - 200);
+      // l'échelle est une image de la planche : ici, juste la flèche
+      g.fillStyle(0x4dd6c1, 0.3 + 0.3*pulse); g.fillTriangle(x, sol - 226, x - 13, sol - 210, x + 13, sol - 210);
     } else
     if (this.def.sortie === 'porte'){
       // l'entrée de la tour : un bloc sombre percé d'une porte éclairée
@@ -337,16 +356,9 @@ Object.assign(Combat.prototype, {
       g.fillStyle(0x4dd6c1, 0.35 + 0.5*pulse);
       g.fillTriangle(x, sol - 156, x - 13, sol - 141, x + 13, sol - 141);
     } else {
-      g.fillStyle(0x0d1120, 1);  g.fillRect(x - 44, sol - 132, 88, 132);
-    g.fillStyle(0x2a3152, 1);  g.fillRect(x - 40, sol - 126, 80, 126);
-    g.fillStyle(0x141a30, 1);  g.fillRect(x - 34, sol - 118, 68, 118);
-    g.lineStyle(3, 0x7f8cc4, 1); g.strokeRect(x - 40, sol - 126, 80, 126);
-    g.lineStyle(2, 0x7f8cc4, 0.8);
-    g.beginPath(); g.moveTo(x, sol - 118); g.lineTo(x, sol); g.strokePath();
-    // flèche qui monte
+      // l'ascenseur est une image de la planche : ici, la flèche seule
       g.fillStyle(bloquee ? 0xe2584d : 0x4dd6c1, bloquee ? 0.5 : 0.35 + 0.5*pulse);
-      g.fillTriangle(x, sol - 150, x - 14, sol - 134, x + 14, sol - 134);
-      g.fillStyle(bloquee ? 0xe2584d : 0xffd98a, 0.25 + 0.35*pulse); g.fillRect(x - 40, sol - 138, 80, 5);
+      g.fillTriangle(x, sol - 172, x - 14, sol - 156, x + 14, sol - 156);
     }
     // sortie condamnée tant que le boss tient : la croix vaut pour toutes
     if (bloquee){
