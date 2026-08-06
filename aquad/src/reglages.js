@@ -103,6 +103,8 @@ const COUL = {
   sable:0xe8d49a, sableOmbre:0xd0b877, herbe:0x7fb35e, herbeSombre:0x639446,
   herbeClaire:0x8fc46e, fleur:0xf2e6cf, fleur2:0xffd166,
   coquillage:0xf5ead0, sableMouille:0xc9ac6e, galet:0x9aa0ac,
+  ombrePortee:0x14333f,  // les ombres réelles sont froides, jamais noires
+  brin:0x577f42,
   rocher:0x8a8f9c, rocherOmbre:0x5d6270,
   tronc:0x8a5a2b, palme:0x3f8a4f, palmeClaire:0x5cab68,
   ponton:0xb07a3e, pontonOmbre:0x6d4420,
