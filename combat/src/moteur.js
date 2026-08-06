@@ -91,6 +91,10 @@ class Combat extends Phaser.Scene {
       this.imgFond.push(this.add.image(0, 0, 'decorAtlas', 'sapin1')
         .setScrollFactor(0).setDepth(-9).setVisible(false));
     this.fondN = 0;
+    this.imgObjets = [];
+    for (let i = 0; i < 10; i++)
+      this.imgObjets.push(this.add.image(0, 0, 'decorAtlas', 'coeur')
+        .setDepth(4.5).setVisible(false));
     this.gEclats   = this.add.graphics().setDepth(6);
     this.gTirs     = this.add.graphics().setDepth(7);
     // huit textes recycles pour les onomatopees : creer un objet texte a
@@ -237,7 +241,35 @@ class Combat extends Phaser.Scene {
     const c = this.add.rectangle(x, SOL_Y - 15, 30, 30, 0xffffff, 0);
     this.physics.add.existing(c, true);
     this.grCaisses.add(c);
-    this.caisses.push({ go:c, pv:2, flash:0 });
+    const img = this.add.image(x, SOL_Y + 1, 'decorAtlas', 'caisseOK')
+      .setOrigin(0.5, 1).setScale(36 / CADRES_DECOR.caisseOK.h).setDepth(3);
+    this.caisses.push({ go:c, pv:2, flash:0, img, efface:0 });
+  }
+  // un bloc bonus flottant : frappé par en dessous, il lâche sa rune
+  creerBloc(x, contenu){
+    const y = SOL_Y - 128;
+    const img = this.add.image(x, y, 'decorAtlas', 'blocPlein')
+      .setScale(46 / CADRES_DECOR.blocPlein.h).setDepth(2.5);
+    this.blocs.push({ img, x, y, contenu, plein:true, frappe:0, phase:this.alea()*6 });
+  }
+  majBlocs(dt){
+    const b = this.joueur.body;
+    for (const bl of this.blocs){
+      bl.phase += dt * 2.4;
+      bl.frappe = Math.max(0, bl.frappe - dt);
+      if (!bl.plein) continue;
+      // le coup de tête de dessous, comme il se doit
+      const tete = this.joueur.y - 20;
+      if (b.velocity.y < -40 && Math.abs(this.joueur.x - bl.x) < 30
+          && tete < bl.y + 28 && tete > bl.y - 8){
+        bl.plein = false; bl.frappe = 0.3;
+        b.setVelocityY(70);
+        SON.jouer('caisse');
+        this.cameras.main.shake(60, 0.003);
+        this.crier(bl.x, bl.y - 34, ['!'], '#ffd166', 18);
+        this.creerObjet(bl.x, bl.y - 22, bl.contenu);
+      }
+    }
   }
   tirerType(x){
     const p = this.def.peuple;
@@ -284,6 +316,17 @@ class Combat extends Phaser.Scene {
     // le boss garde la sortie : elle reste verrouillée tant qu'il tient
     this.boss = this.creerMonstre(this.def.boss, this.sortieX - 190, x + 60, this.sortieX - 40);
     this.bossVivant = true;
+
+    // les blocs bonus : un segment sur deux environ, à hauteur de saut,
+    // avec les trois pouvoirs en rotation
+    this.blocs = [];
+    let nb2 = 0;
+    for (let i = 1; i + 1 < this.segmentsSol.length; i++){
+      const s = this.segmentsSol[i];
+      if (s.x1 - s.x0 < 420) continue;
+      if (Math.abs(Math.sin(i * 9.17)) < 0.45) continue;
+      this.creerBloc((s.x0 + s.x1) / 2 + 60, ['pistolet','fusil','laser'][nb2++ % 3]);
+    }
 
     // les accessoires de décor posés sur les segments : la forêt a ses
     // feuillus et buissons, la ville son mobilier
@@ -449,14 +492,16 @@ class Combat extends Phaser.Scene {
       this.eclat(k.go.x, k.go.y - 4, this.sens, 16);
       this.crier(k.go.x, k.go.y - 24, CRIS.caisse, '#e8b06a', 15);
       this.creerObjet(k.go.x, k.go.y - 8, this.butin());
+      k.img.setTexture('decorAtlas', 'caisseCassee');
+      k.efface = 1.1;   // les débris restent un instant puis s'effacent
       k.go.destroy();
     }
   }
   butin(){
+    // les pouvoirs ne tombent plus des caisses : ils vivent dans les
+    // blocs bonus. Les caisses soignent, et parfois offrent une vie.
     const r = this.alea();
-    if (r < 0.20) return 'laser';
-    if (r < 0.38) return 'pistolet';
-    if (r < 0.50) return 'fusil';
+    if (r < 0.10) return 'vie';
     return 'coeur';
   }
   eclat(x, y, sens, n, couleur){
@@ -798,6 +843,7 @@ class Combat extends Phaser.Scene {
       this.checkpoint.y = this.joueur.y;
     }
 
+    this.majBlocs(dt);
     this.majMonstres(dt);
     this.majTirs(dt);
 
