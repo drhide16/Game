@@ -876,9 +876,11 @@ class Combat extends Phaser.Scene {
   majTourelle(m, dt, dx, memeNiveau){
     const c = m.def.canon;
     m.repos = Math.max(0, m.repos - dt);
+    m.tira = Math.max(0, (m.tira || 0) - dt);   // le flash du canon
     if (m.vise > 0){
       m.vise -= dt;
       if (m.vise <= 0){
+        m.tira = 0.22;
         const dy = (this.joueur.y - 10) - (m.go.y - 6);
         const d = Math.hypot(dx, dy) || 1;
         this.tirsEnnemis.push({
@@ -904,6 +906,22 @@ class Combat extends Phaser.Scene {
       t.x += t.vx * dt;
       t.y += t.vy * dt;
       if (t.vie <= 0){ t.fini = true; continue; }
+      // le CONTRE : une boule de feu qui croise un tir ennemi le renvoie
+      // à l'expéditeur — il devient une boule du joueur, plus rapide, et
+      // c'est la tourelle qui encaisse son propre pruneau
+      if (!t.jet) for (const e of this.tirsEnnemis){
+        if (e.fini) continue;
+        if (Math.abs(t.x - e.x) < 16 && Math.abs(t.y - e.y) < 16){
+          e.fini = true;
+          this.tirs.push({ x:e.x, y:e.y, vx:-e.vx*1.35, vy:-e.vy*0.5,
+                           degats:2, recul:170, bas:false, vie:1.6 });
+          SON.jouer('touche');
+          this.eclat(e.x, e.y, Math.sign(-e.vx) || 1, 10, 0xffd166);
+          this.crier(e.x, e.y - 16, ['CONTRÉ !'], '#ffd166', 14);
+          this.cameras.main.shake(70, 0.004);
+          break;
+        }
+      }
       const boite = new Phaser.Geom.Rectangle(t.x - 5, t.y - 3, 10, 6);
       for (const m of this.monstres){
         if (m.mort) continue;

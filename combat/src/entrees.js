@@ -115,7 +115,7 @@ function majBoutonArme(arme, munitions, segments){
     nom.textContent = 'RECHARGE';
   } else if (arme){
     signe.textContent = '✦';
-    nom.textContent = ARMES[arme].nom + ' ' + munitions + (segments > 0 ? '·' + segments : '');
+    nom.textContent = (ARMES[arme].court || ARMES[arme].nom) + ' ' + munitions + (segments > 0 ? '·' + segments : '');
   } else {
     signe.textContent = '□';
     nom.textContent = 'POING';
