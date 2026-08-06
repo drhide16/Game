@@ -260,7 +260,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '28';
+const VERSION = '29';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -1031,7 +1031,7 @@ class Combat extends Phaser.Scene {
     const m = {
       go, type, def:d, pv, pvMax:pv, assomme:0, flash:0, blinde:0,
       dir:-1, minX, maxX, baseY:y, phase:this.alea()*6,
-      prepare:0, repos:0, vise:0,
+      prepare:0, repos:0, vise:0, rentre:false,
     };
     // les monstres qui ont leur planche : une image plutôt qu'un dessin
     const sm = SPRITES_MONSTRES[type];
@@ -1055,9 +1055,14 @@ class Combat extends Phaser.Scene {
   // et sa rune jaillit — le clin d'œil à Mario reste dans le visuel
   creerBloc(x, contenu){
     const y = SOL_Y - 24;
+    // un vrai obstacle : le même corps statique que les caisses, donc
+    // les colliders déjà en place (joueur, marcheurs, objets) s'appliquent
+    const corps = this.add.rectangle(x, y, 44, 44, 0xffffff, 0);
+    this.physics.add.existing(corps, true);
+    this.grCaisses.add(corps);
     const img = this.add.image(x, y, 'decorAtlas', 'blocPlein')
       .setScale(46 / CADRES_DECOR.blocPlein.h).setDepth(2.5);
-    this.blocs.push({ img, x, y, contenu, plein:true, frappe:0, phase:this.alea()*6 });
+    this.blocs.push({ img, x, y, contenu, plein:true, frappe:0, phase:this.alea()*6, corps });
   }
   majBlocs(dt){
     for (const bl of this.blocs){
@@ -1737,19 +1742,27 @@ class Combat extends Phaser.Scene {
       } else {
         m.repos = Math.max(0, m.repos - dt);
         const ch = m.def.charge;
-        if (ch && m.repos <= 0 && Math.abs(dx) < ch.portee && memeNiveau){
+        if (ch && m.repos <= 0 && !m.rentre && Math.abs(dx) < ch.portee && memeNiveau){
           m.prepare = ch.preparation; m.repos = ch.repos;
           m.go.body.setVelocityX(0);
           SON.jouer('charge');
         } else {
+          // En poursuite, une LAISSE : le monstre sort de sa zone jusqu'à
+          // 170 px pour venir vraiment au contact. Au-delà, demi-tour —
+          // il rentre au centre de sa zone en ignorant le joueur.
           let v;
-          if (Math.abs(dx) < 340 && memeNiveau) v = Math.sign(dx) * m.def.vitesse * this.D.vitesse;
-          else {
+          const centre = (m.minX + m.maxX) / 2;
+          if (m.rentre){
+            if (Math.abs(centre - m.go.x) < 40){ m.rentre = false; v = 0; }
+            else v = Math.sign(centre - m.go.x) * m.def.patrouille * 1.4 * this.D.vitesse;
+          } else if (Math.abs(dx) < 340 && memeNiveau){
+            v = Math.sign(dx) * m.def.vitesse * this.D.vitesse;
+            if (m.go.x < m.minX - 170 || m.go.x > m.maxX + 170) m.rentre = true;
+          } else {
             if (m.go.x < m.minX) m.dir = 1;
             if (m.go.x > m.maxX) m.dir = -1;
             v = m.dir * m.def.patrouille * this.D.vitesse;
           }
-          if ((m.go.x <= m.minX && v < 0) || (m.go.x >= m.maxX && v > 0)) v = 0;
           m.go.body.setVelocityX(v);
           if (m.def.vole){
             const vise = m.baseY + Math.sin(m.phase * 0.7) * 7;
