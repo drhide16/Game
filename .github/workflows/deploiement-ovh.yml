@@ -1,0 +1,43 @@
+# Déploie le site (menu + les deux jeux) sur l'hébergement web OVH par
+# FTP à chaque poussée sur main — indépendant de GitHub Pages, qui sert
+# de second miroir quand il veut bien.
+#
+# À configurer UNE FOIS dans Settings → Secrets and variables → Actions
+# → New repository secret :
+#   OVH_FTP_SERVEUR      p. ex. ftp.cluster0XX.hosting.ovh.net
+#   OVH_FTP_UTILISATEUR  l'identifiant FTP OVH
+#   OVH_FTP_MOT_DE_PASSE le mot de passe FTP
+# (le job se saute proprement tant que les secrets ne sont pas posés)
+name: deploiement-ovh
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ftp:
+    runs-on: ubuntu-latest
+    env:
+      SERVEUR: ${{ secrets.OVH_FTP_SERVEUR }}
+    steps:
+      - name: Secrets présents ?
+        if: env.SERVEUR == ''
+        run: echo "Secrets OVH absents — déploiement sauté." && exit 0
+      - uses: actions/checkout@v4
+        if: env.SERVEUR != ''
+      - name: Ne garder que le site servi
+        if: env.SERVEUR != ''
+        run: |
+          mkdir -p site/combat site/aquad
+          cp index.html site/
+          cp combat/index.html site/combat/
+          cp aquad/index.html site/aquad/
+      - name: Déployer par FTP
+        if: env.SERVEUR != ''
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.OVH_FTP_SERVEUR }}
+          username: ${{ secrets.OVH_FTP_UTILISATEUR }}
+          password: ${{ secrets.OVH_FTP_MOT_DE_PASSE }}
+          local-dir: site/
+          server-dir: www/
