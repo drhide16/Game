@@ -529,17 +529,23 @@ Object.assign(Combat.prototype, {
       const c = COUPS[this.attaque.type];
       const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
       let anim = c.jet ? 'lancer' : (c.faisceau || c.tir) ? 'tir'
-               : (this.attaque.type === 'pied' || this.attaque.type === 'retourne') ? 'pied'
+               : this.attaque.type === 'retourne' ? 'retourne'
+               : this.attaque.type === 'pied' ? 'pied'
                : 'poing';
-      // les coups donnés accroupi ont leurs propres poses
+      // les coups donnés accroupi ont leurs propres poses, et le poing
+      // élastique a sa planche à aura dorée
       if (this.attaque.bas && (anim === 'poing' || anim === 'pied')) anim += 'Bas';
+      else if (anim === 'poing' && this.attaque.elastique) anim = 'poingCharge';
       f = cadre(anim, Math.floor(p * CADRES_PERSO[anim].length));
     } else if (this.charge){
-      // le coup s'arme : la pose de départ du coup, qui tremble une fois
-      // l'élastique prêt (c'est la lueur dessinée plus bas qui le dit)
-      const pied = this.charge.action === 'pied' || this.charge.action === 'retourne';
-      f = cadre(this.accroupi ? (pied ? 'piedBas' : 'poingBas')
-                              : (pied ? 'pied' : 'poing'), 0);
+      // le coup s'arme : la pose de départ du coup ; le poing prêt à
+      // partir élastique s'embrase déjà (frame d'aura pleine)
+      const act = this.charge.action;
+      if (this.accroupi)
+        f = cadre(act === 'pied' || act === 'retourne' ? 'piedBas' : 'poingBas', 0);
+      else if (act === 'retourne') f = cadre('retourne', 0);
+      else if (act === 'poing' && this.charge.pret) f = cadre('poingCharge', 1);
+      else f = cadre(act === 'pied' ? 'pied' : 'poing', 0);
     } else if (this.invuln > CFG.invincibilite - 0.42 && this.invuln <= CFG.invincibilite){
       // on vient d'encaisser : la grimace prime sur le reste
       f = cadre('recevoir', this.invuln > CFG.invincibilite - 0.2 ? 0 : 1);
@@ -567,8 +573,10 @@ Object.assign(Combat.prototype, {
     const basQuiFrappe = !!(cA && this.attaque.bas && (cA.tir || cA.faisceau || cA.jet));
     spr.setScale(ECHELLE_PERSO * (1 + this.squash*0.22),
                  ECHELLE_PERSO * (1 - this.squash*0.22) * (basQuiFrappe ? 0.72 : 1));
-    // l'élastique n'a pas de bras étiré en pixel-art : le corps s'embrase
-    if (this.attaque && this.attaque.elastique) spr.setTint(0xffd166);
+    // le pied ou le retourné élastiques n'ont pas de planche à aura : le
+    // corps s'embrase par teinte ; le poing chargé, lui, a ses frames
+    if (this.attaque && this.attaque.elastique && !f.nom.startsWith('poingCharge'))
+      spr.setTint(0xffd166);
     else spr.clearTint();
     spr.setAlpha(this.etat === 'jeu' && this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
 
