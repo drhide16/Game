@@ -333,11 +333,11 @@ class Aquad extends Phaser.Scene {
     return 'coeur';
   }
   poussiere(x, y){
-    for (let i = 0; i < 2; i++)
-      this.eclats.push({ x: x + (this.alea()-0.5)*10, y,
+    for (let i = 0; i < 3; i++)
+      this.eclats.push({ x: x + (this.alea()-0.5)*12, y,
         couleur: 0xd8c9a4,
         vx: (this.alea()-0.5)*60, vy: -8 - this.alea()*16,
-        vie: 0.25 + this.alea()*0.1, max: 0.35 });
+        vie: 0.32 + this.alea()*0.13, max: 0.45 });
   }
   eclat(x, y, sens, n, couleur){
     n = n || 7;

@@ -217,16 +217,33 @@ Object.assign(Aquad.prototype, {
     // c'est le tri par profondeur projetée qui fait passer derrière/devant
     const bal = Math.sin(d.phase) * 3;
     g.fillStyle(0x000000, 0.18); g.fillEllipse(P.x + SOLEIL.x*3, P.y + 8 + SOLEIL.y, 52, 12);
+    // l'occlusion au pied du tronc
+    g.fillStyle(0x000000, 0.14); g.fillEllipse(P.x, P.y + 5, 16, 6);
     g.lineStyle(9, COUL.tronc, 1);
     g.beginPath(); g.moveTo(P.x, P.y + 4);
     g.lineTo(P.x + 6 + bal * 0.4, P.y - 46); g.strokePath();
-    const tx = P.x + 7 + bal * 0.5, ty = P.y - 52;
-    g.fillStyle(COUL.palme, 1);
-    for (let a = 0; a < 6; a++){
-      const ang = a * Math.PI / 3 + bal * 0.02;
-      g.fillEllipse(tx + Math.cos(ang) * 20, ty + Math.sin(ang) * 11, 34, 12);
+    // les anneaux de croissance du tronc
+    g.lineStyle(2, 0x6d4420, 0.5);
+    for (const k of [0.3, 0.55, 0.8]){
+      const rx = P.x + (6 + bal*0.4) * k, ry = P.y + 4 - 50 * k;
+      g.beginPath(); g.moveTo(rx - 4, ry); g.lineTo(rx + 4, ry); g.strokePath();
     }
-    g.fillStyle(COUL.palmeClaire, 1); g.fillEllipse(tx, ty, 18, 12);
+    // la couronne : 6 palmes RADIALES, chacune dans son repère tourné —
+    // celles du bas (face au joueur) sont plus claires, la lumière vient
+    // d'en haut
+    const tx = P.x + 7 + bal * 0.5, ty = P.y - 52;
+    for (let a = 0; a < 6; a++){
+      const ang = a * Math.PI / 3 + 0.26 + bal * 0.02;
+      const bas = Math.sin(ang) > 0.15;
+      g.save();
+      g.translateCanvas(tx, ty);
+      g.rotateCanvas(ang);
+      g.fillStyle(bas ? COUL.palmeClaire : COUL.palme, 1);
+      g.fillEllipse(13, 0, 24, 9);
+      g.fillEllipse(23, 2.5, 12, 6);   // le bout de la palme retombe
+      g.restore();
+    }
+    g.fillStyle(COUL.palme, 1); g.fillEllipse(tx, ty, 14, 10);
     g.fillStyle(0x6d4420, 1);
     g.fillCircle(tx - 6, ty + 7, 4); g.fillCircle(tx + 5, ty + 8, 4);
   },
@@ -271,6 +288,8 @@ Object.assign(Aquad.prototype, {
       g.setDepth(P.y);
       const x = P.x, y = P.y + 6, clair = k.flash > 0;
       g.fillStyle(0x000000, 0.2); g.fillEllipse(x + SOLEIL.x, y + 2 + SOLEIL.y*0.5, 36, 11);
+      // l'occlusion de contact : la base assombrit le sol qu'elle touche
+      g.fillStyle(0x000000, 0.14); g.fillEllipse(x, y + 3, 28, 8);
       // un vrai cube posé sur le sol isométrique
       this.cube(g, x, y, 30, 20,
         clair ? 0xffffff : COUL.boisClair,
@@ -281,6 +300,9 @@ Object.assign(Aquad.prototype, {
       const ty = y - 20;
       g.beginPath(); g.moveTo(x - 15, ty); g.lineTo(x + 15, ty); g.strokePath();
       g.beginPath(); g.moveTo(x, ty - 7.5); g.lineTo(x, ty + 7.5); g.strokePath();
+      // l'arête nord-ouest du couvercle attrape le soleil
+      g.lineStyle(2, 0xf7e9c8, 0.75);
+      g.beginPath(); g.moveTo(x - 15, ty); g.lineTo(x, ty - 7.5); g.strokePath();
     }
   },
 
@@ -319,6 +341,8 @@ Object.assign(Aquad.prototype, {
         const px = x + s * 14*e, py = y - 2 + i * 6*e + (Math.sin(m.phase*2 + i) * 2);
         g.beginPath(); g.moveTo(x + s*8*e, y + (i-1)*4*e); g.lineTo(px, py); g.strokePath();
       }
+    // l'occlusion de contact : le corps assombrit le sol juste sous lui
+    g.fillStyle(0x000000, 0.12); g.fillEllipse(x, y + 8*e, 22*e, 5*e);
     g.fillStyle(ombre, 1); g.fillEllipse(x, y + 2*e + dandine*0.4, 28*e, 16*e);
     g.fillStyle(corps, 1); g.fillEllipse(x, y - 2*e + dandine*0.4, 26*e, 16*e);
     // le dessus de la carapace attrape la lumière : c'est un dôme
@@ -342,10 +366,14 @@ Object.assign(Aquad.prototype, {
   dessinerMeduse(g, m){
     const e = m.def.taille[0] / 26;
     const P = this.iso(m.go.x, m.go.y);
-    const x = P.x, y = P.y + Math.sin(m.phase) * 3;
+    const bob = Math.sin(m.phase) * 3;
+    const x = P.x, y = P.y + bob;
     const eclaire = m.flash > 0 ? 0xffffff : null;
     const corps = eclaire || m.def.couleur;
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, P.y + 14*e + SOLEIL.y*0.5, 26*e, 8*e);
+    // l'ombre fait l'inverse de la cloche : plus la méduse monte, plus
+    // l'ombre rétrécit et pâlit — c'est ça, flotter
+    g.fillStyle(0x000000, 0.15 + bob*0.012);
+    g.fillEllipse(x + SOLEIL.x, P.y + 14*e + SOLEIL.y*0.5, 26*e + bob*2, 8*e + bob*0.6);
     // tentacules qui ondulent dessous
     g.lineStyle(2.5*e, eclaire || m.def.ombre, 0.9);
     for (let i = -2; i <= 2; i++){
@@ -430,23 +458,35 @@ Object.assign(Aquad.prototype, {
       for (const dec of [Math.PI, 0]){
         const p = t + dec;
         const s = Math.sin(p);
-        pieds.push([-Math.cos(p)*foulee, Math.max(0, s) * -genou * 0.6]);
+        // pied d'appui : PLANTÉ dans le sol, il recule sous le corps et
+        // pousse ; pied de vol : un arc de lever franc
+        pieds.push([-Math.cos(p)*foulee, s > 0 ? -s * genou * 0.8 : 1]);
         mains.push([Math.cos(p)*(5 + allure*6), EPAULE + 12 - Math.max(0, s)*(2 + allure*5)]);
       }
       inclinaison = 0.04 + allure*0.06;
     } else {
       const souffle = Math.sin(this.time.now / 420) * 1.2;
-      pieds = [[-6, 0], [6, 0]];
+      pieds = [[-6, 1], [6, 1]];
       mains = [[-7, EPAULE + 11 + souffle], [8, EPAULE + 9 + souffle]];
     }
 
     // l'ombre fait exactement la largeur de la boîte au sol : c'est elle
     // qu'on regarde pour juger un contact. Elle reste collée au sol pendant
     // que le corps rebondit sur ses pas — le volume le moins cher du monde.
-    g.fillStyle(0x000000, 0.22); g.fillEllipse(SOLEIL.x, 3 + SOLEIL.y*0.5, 26, 8);
-    const lev = (marche && !j.attaque) ? Math.abs(Math.sin(t)) * 2 : 0;
+    const lev = (marche && !j.attaque) ? Math.abs(Math.sin(t)) * 2.2 : 0;
+    // l'ombre respire avec le corps : large et sombre à l'appui, plus
+    // petite et plus claire quand il est en l'air — le signal de contact
+    g.fillStyle(0x000000, 0.26 - lev*0.03);
+    g.fillEllipse(SOLEIL.x, 3 + SOLEIL.y*0.5, 26 - lev*1.5, 8 - lev*0.4);
     g.save();
-    g.translateCanvas(0, -lev);
+    // à l'arrêt, un léger transfert de poids ; en marche, l'impact du pas
+    // écrase brièvement le corps sur son appui
+    const balance = (!marche && !j.attaque && !j.charge && !j.porte) ? Math.sin(this.time.now / 700) * 0.8 : 0;
+    g.translateCanvas(balance, -lev);
+    if (marche && !j.attaque){
+      const c = 1 - Math.min(1, Math.abs(Math.sin(t)) * 4);
+      if (c > 0) g.scaleCanvas(1 + c*0.04, 1 - c*0.06);
+    }
     // pendant un coup, le corps reste DEBOUT : juste un penché plafonné
     // vers la frappe — la fente, le membre tendu et l'ellipse au sol
     // disent déjà la direction
@@ -463,6 +503,12 @@ Object.assign(Aquad.prototype, {
     const larg = vue === 'profil' ? 5 : 7;
     g.fillStyle(COUL.gi, 1);
     g.fillPoints([{x:-larg,y:EPAULE},{x:larg,y:EPAULE},{x:larg-1,y:HANCHE+1},{x:-(larg-1),y:HANCHE+1}], true);
+    // le modelé : lumière au nord-ouest, ombre au sud-est — le même soleil
+    // que les ombres portées
+    g.fillStyle(0x000000, 0.10);
+    g.fillPoints([{x:larg-2.5,y:EPAULE},{x:larg,y:EPAULE},{x:larg-1,y:HANCHE+1},{x:larg-3.5,y:HANCHE+1}], true);
+    g.fillStyle(0xffffff, 0.10);
+    g.fillPoints([{x:-larg,y:EPAULE},{x:-larg+2.5,y:EPAULE},{x:-larg+3.5,y:HANCHE+1},{x:-(larg-1),y:HANCHE+1}], true);
     g.lineStyle(2.4, COUL.col, 1);
     if (vue === 'face'){
       g.beginPath(); g.moveTo(-3, EPAULE-1); g.lineTo(2, EPAULE+8); g.strokePath();
@@ -520,6 +566,8 @@ Object.assign(Aquad.prototype, {
       g.fillStyle(0x1a0f22, 1);
       g.fillRect(hx+3.4, hy-1.4, 2, 2.6);   // un seul œil, tourné vers l'avant
     }
+    // l'ombre douce sous le menton, côté opposé au soleil
+    g.fillStyle(0x000000, 0.08); g.fillEllipse(hx + 3, hy + 3.6, 7, 3.6);
 
     // l'objet porté, posé sur les mains levées
     if (j.porte){
@@ -562,9 +610,11 @@ Object.assign(Aquad.prototype, {
     const g = this.gObjets; g.clear();
     for (const o of this.objets){
       const P = this.iso(o.go.x, o.go.y);
-      const x = P.x, y = P.y + Math.sin(o.phase)*2.5;
-      // même les objets qui flottent projettent leur ombre au sol
-      g.fillStyle(0x000000, 0.15); g.fillEllipse(x + SOLEIL.x, P.y + 12, 16, 5);
+      const bobO = Math.sin(o.phase) * 2.5;
+      const x = P.x, y = P.y + bobO;
+      // l'ombre respire à l'inverse de l'objet qui danse
+      g.fillStyle(0x000000, 0.15 + bobO*0.014);
+      g.fillEllipse(x + SOLEIL.x, P.y + 12, 16 + bobO*1.4, 5 + bobO*0.4);
       if (o.type === 'vie'){
         const bat = Math.sin(o.phase * 2) * 2;
         g.fillStyle(0xffd166, 0.22); g.fillCircle(x, y, 17);
