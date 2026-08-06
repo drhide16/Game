@@ -528,21 +528,26 @@ Object.assign(Combat.prototype, {
     } else if (this.attaque){
       const c = COUPS[this.attaque.type];
       const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
-      const anim = c.jet ? 'lancer' : (c.faisceau || c.tir) ? 'tir'
-                 : (this.attaque.type === 'pied' || this.attaque.type === 'retourne') ? 'pied'
-                 : 'poing';
+      let anim = c.jet ? 'lancer' : (c.faisceau || c.tir) ? 'tir'
+               : (this.attaque.type === 'pied' || this.attaque.type === 'retourne') ? 'pied'
+               : 'poing';
+      // les coups donnés accroupi ont leurs propres poses
+      if (this.attaque.bas && (anim === 'poing' || anim === 'pied')) anim += 'Bas';
       f = cadre(anim, Math.floor(p * CADRES_PERSO[anim].length));
     } else if (this.charge){
       // le coup s'arme : la pose de départ du coup, qui tremble une fois
       // l'élastique prêt (c'est la lueur dessinée plus bas qui le dit)
-      f = cadre(this.charge.action === 'pied' || this.charge.action === 'retourne' ? 'pied' : 'poing', 0);
+      const pied = this.charge.action === 'pied' || this.charge.action === 'retourne';
+      f = cadre(this.accroupi ? (pied ? 'piedBas' : 'poingBas')
+                              : (pied ? 'pied' : 'poing'), 0);
     } else if (this.invuln > CFG.invincibilite - 0.42 && this.invuln <= CFG.invincibilite){
       // on vient d'encaisser : la grimace prime sur le reste
       f = cadre('recevoir', this.invuln > CFG.invincibilite - 0.2 ? 0 : 1);
     } else if (!auSol){
       f = cadre('saut', b.velocity.y < -60 ? 1 : b.velocity.y > 60 ? 3 : 2);
     } else if (this.accroupi){
-      f = cadre('saut', 0);   // la pose ramassée de l'appel du saut
+      // la vraie garde basse ; en rampant, les deux poses s'alternent
+      f = cadre('accroupi', marche ? Math.floor(this.phase * 2) % 2 : 0);
     } else if (marche){
       const anim = allure > 0.72 ? 'course' : 'marche';
       const n = CADRES_PERSO[anim].length;
@@ -556,9 +561,10 @@ Object.assign(Combat.prototype, {
     spr.setFlipX(flip);
     spr.setOrigin(flip ? 1 - f.c.ox : f.c.ox, f.c.oy);
     spr.setPosition(this.joueur.x, this.joueur.y + PIEDS + 2);
-    // un coup (ou un coup qui s'arme) donné accroupi : la planche n'a
-    // pas ces poses, on tasse le sprite — la frappe reste basse à l'œil
-    const basQuiFrappe = (this.attaque && this.attaque.bas) || (this.charge && this.accroupi);
+    // seuls les tirs et le jet n'ont pas de pose accroupie : pour eux on
+    // tasse encore le sprite — poing et pied ont leurs vraies frames
+    const cA = this.attaque && COUPS[this.attaque.type];
+    const basQuiFrappe = !!(cA && this.attaque.bas && (cA.tir || cA.faisceau || cA.jet));
     spr.setScale(ECHELLE_PERSO * (1 + this.squash*0.22),
                  ECHELLE_PERSO * (1 - this.squash*0.22) * (basQuiFrappe ? 0.72 : 1));
     // l'élastique n'a pas de bras étiré en pixel-art : le corps s'embrase
