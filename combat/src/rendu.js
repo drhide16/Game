@@ -405,7 +405,8 @@ Object.assign(Combat.prototype, {
     const g = this.gMonstres; g.clear();
     for (const m of this.monstres){
       const s = m.def.silhouette;
-      if (s === 'drone') this.dessinerDrone(g, m);
+      if (m.spr) this.dessinerSpriteMonstre(g, m);
+      else if (s === 'drone') this.dessinerDrone(g, m);
       else if (s === 'gardien') this.dessinerGardien(g, m);
       else if (s === 'tourelle') this.dessinerTourelle(g, m);
       else this.dessinerBrute(g, m);
@@ -416,6 +417,46 @@ Object.assign(Combat.prototype, {
         g.fillStyle(m.def.boss ? 0xff5e5e : 0xe2584d, 1); g.fillRect(x-l, y, l*2 * (m.pv/m.pvMax), 4);
       }
     }
+    this.dessinerCadavres();
+  },
+  // le rendu commun des monstres à planche : cycle Va en déplacement,
+  // frames Attaque quand le joueur est à portée (ou qu'il encaisse), la
+  // dépouille est gérée à part. Les planches regardent vers la droite.
+  dessinerSpriteMonstre(g, m){
+    const spr = m.spr, pref = m.sprPref;
+    const x = m.go.x, base = m.go.y + m.def.taille[1]/2 + 2;
+    if (m.def.vole){ g.fillStyle(0x000000, 0.18); g.fillEllipse(x, SOL_Y - 3, 26, 5); }
+    else { g.fillStyle(0x000000, 0.25); g.fillEllipse(x, base - 1, m.def.taille[0], 6); }
+    const dx = this.joueur.x - m.go.x;
+    const proche = Math.abs(dx) < 90 && Math.abs(this.joueur.y - m.go.y) < 80;
+    const nA = CADRES_PERSO[pref + 'Attaque'].length;
+    const nV = CADRES_PERSO[pref + 'Va'].length;
+    let anim, idx;
+    if (m.assomme > 0){ anim = pref + 'Attaque'; idx = 0; }
+    else if (proche){ anim = pref + 'Attaque'; idx = 1 + Math.floor(m.phase * 1.5) % (nA - 1); }
+    else { anim = pref + 'Va'; idx = Math.floor(m.phase * 1.1) % nV; }
+    const c = CADRES_PERSO[anim][idx];
+    const flip = dx < 0;
+    spr.setVisible(true).setTexture('persoAtlas', anim + idx).setFlipX(flip);
+    spr.setOrigin(flip ? 1 - c.ox : c.ox, 1);
+    spr.setPosition(x, base).setScale(m.sprE);
+    if (m.flash > 0) spr.setTintFill(0xffffff);
+    else if (m.blinde > 0) spr.setTint(COUL.blinde);
+    else spr.clearTint();
+  },
+  dessinerCadavres(){
+    let ci = 0;
+    for (const cd of this.cadavres){
+      const img = this.imgCadavres[ci++];
+      if (!img) break;
+      const cs = CADRES_PERSO[cd.pref + 'Mort'];
+      const idx = Math.min(cs.length - 1, Math.floor(cd.t / 0.22));
+      img.setVisible(true).setTexture('persoAtlas', cd.pref + 'Mort' + idx)
+         .setFlipX(cd.sens < 0).setOrigin(0.5, 1)
+         .setPosition(cd.x, cd.y).setScale(cd.e)
+         .setAlpha(cd.t > 0.9 ? Math.max(0, 1 - (cd.t - 0.9) / 0.6) : 1);
+    }
+    for (let i = ci; i < this.imgCadavres.length; i++) this.imgCadavres[i].setVisible(false);
   },
   dessinerBrute(g, m){
     const gros = !!m.def.gros;
