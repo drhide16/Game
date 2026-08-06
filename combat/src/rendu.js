@@ -82,6 +82,7 @@ Object.assign(Combat.prototype, {
       g.fillStyle(0xffffff, 0.9 * k);   g.fillRect(g0, y -  2*k, w,  4*k);
       g.fillStyle(0xffffff, k); g.fillCircle(x0, y, 7*k);
     }
+    let bi = 0;
     for (const t of this.tirs){
       if (t.jet){
         // le segment usé tournoie : un trait épais qui tourne suffit à
@@ -94,10 +95,11 @@ Object.assign(Combat.prototype, {
         g.fillStyle(t.clair || 0xffffff, 0.95); g.fillCircle(t.x, t.y, 2.2);
         continue;
       }
-      g.fillStyle(t.couleur, 0.25); g.fillCircle(t.x, t.y, 7);
-      g.fillStyle(t.couleur, 1);    g.fillRect(t.x - 5, t.y - 2, 10, 4);
-      g.fillStyle(0xffffff, 0.9);   g.fillRect(t.x - 2, t.y - 1, 4, 2);
+      // la balle est la boule de feu de la planche
+      const img = this.imgTirs[bi++];
+      if (img) img.setVisible(true).setPosition(t.x, t.y).setFlipX(t.vx < 0);
     }
+    for (let i = bi; i < this.imgTirs.length; i++) this.imgTirs[i].setVisible(false);
     for (const t of this.tirsEnnemis){
       g.fillStyle(COUL.tirEnnemi, 0.25); g.fillCircle(t.x, t.y, 9);
       g.fillStyle(COUL.tirEnnemi, 1);    g.fillCircle(t.x, t.y, 4.5);
@@ -510,168 +512,69 @@ Object.assign(Combat.prototype, {
 
   dessinerPerso(b){
     const g = this.perso; g.clear();
+    const spr = this.persoSpr;
     const auSol = b.blocked.down || b.touching.down;
-    const t = this.phase;
     const marche = Math.abs(b.velocity.x) > 20;
-    let pieds, mains, inclinaison = -0.03;
-    let etB = 1, etJ = 1;   // étirement élastique du bras et de la jambe qui frappent
     const allure = Math.min(1, Math.abs(b.velocity.x) / CFG.vitesseCourse);
-    const rampe = this.accroupi && marche;
-    let tasse = this.accroupi ? (rampe ? 13 : 9) : 0;
-    // le corps s'enfonce au milieu de l'appui et se déplie à la poussée :
-    // c'est ce rebond, plus que les jambes, qui donne la course
-    if (!this.accroupi && auSol && marche) tasse += Math.abs(Math.sin(t)) * allure * 2.6;
-
-    if (this.attaque){
+    const cadre = (anim, i) => {
+      const cs = CADRES_PERSO[anim];
+      const k = Phaser.Math.Clamp(i, 0, cs.length - 1);
+      return { nom: anim + k, c: cs[k] };
+    };
+    let f;
+    if (this.etat === 'perdu' || this.etat === 'gameover'){
+      // à terre : la chute se joue une fois, puis on reste allongé
+      f = cadre('mourir', Math.floor((this.time.now - (this.mortDebut || 0)) / 150));
+    } else if (this.attaque){
       const c = COUPS[this.attaque.type];
       const p = Phaser.Math.Clamp(this.attaque.t / c.duree, 0, 1);
-      const ext = Math.sin(Math.PI * Math.min(1, p * 1.2));
-      const ela = this.attaque.elastique ? CFG.porteeElastique : 1;
-      if (this.attaque.type === 'poing'){
-        etB = ela;
-        mains = [[-6 - ext*3, EPAULE + 9], [(4 + ext*22) * ela, EPAULE + 2 - ext*3]];
-        pieds = [[-9 - ext*2, 0], [7 + ext*2, 0]];
-        inclinaison = -0.05 - ext*0.06;
-      } else if (this.attaque.type === 'pied'){
-        mains = [[-10 - ext*5, EPAULE + 2], [2 - ext*4, EPAULE + 11]];
-        etJ = ela;
-        pieds = [[-6, 0], [(6 + ext*26) * ela, -6 - ext*14]];
-        inclinaison = 0.04 + ext*0.12;
-      } else if (this.attaque.type === 'crochet'){
-        // le bras ne peut pas dépasser le sommet du crâne, sa longueur
-        // l'en empêche : c'est le corps qui se soulève avec le coup
-        etB = ela;
-        mains = [[-7 + ext*2, EPAULE + 12], [5 + ext*3, EPAULE - 4 - ext*22*ela]];
-        pieds = [[-8, 0], [7, -ext*3]];
-        inclinaison = 0.02 - ext*0.10;
-        tasse -= ext * 4;
-      } else if (c.faisceau || c.tir || c.jet){
-        mains = [[-8 + ext*2, EPAULE + 8], [11 + ext*12, EPAULE + 6]];
-        pieds = [[-9, 0], [8, 0]];
-        inclinaison = -0.04 - ext*0.03;
-      } else {
-        const balai = -1 + 2*p;
-        mains = [[-12*balai, EPAULE + 4], [12*balai, EPAULE + 6]];
-        etJ = ela;
-        pieds = [[-4, 0], [balai*30*ela, -14 - Math.sin(Math.PI*p)*8]];
-        inclinaison = -0.10 + p*0.20;
-      }
+      const anim = c.jet ? 'lancer' : (c.faisceau || c.tir) ? 'tir'
+                 : (this.attaque.type === 'pied' || this.attaque.type === 'retourne') ? 'pied'
+                 : 'poing';
+      f = cadre(anim, Math.floor(p * CADRES_PERSO[anim].length));
     } else if (this.charge){
-      // le coup s'arme : membre replié, tremblement quand l'élastique est prêt
-      const k = Math.min(1, this.charge.t / CFG.seuilElastique);
-      const trem = this.charge.pret ? Math.sin(this.time.now / 30) * 1.2 : 0;
-      if (this.charge.action === 'pied'){
-        mains = [[-9, EPAULE + 4], [6, EPAULE + 10]];
-        pieds = [[-7, 0], [-1 - k*4 + trem, -6 - k*4]];
-        inclinaison = -0.08;
-      } else if (this.charge.action === 'retourne'){
-        mains = [[-10 - k*3 + trem, EPAULE + 6], [8, EPAULE + 8]];
-        pieds = [[-6, 0], [5, 0]];
-        inclinaison = -0.12 - k*0.06;
-      } else {
-        mains = [[-8, EPAULE + 8], [-2 - k*5 + trem, EPAULE + 4]];
-        pieds = [[-9, 0], [7, 0]];
-        inclinaison = -0.06 - k*0.04;
-      }
+      // le coup s'arme : la pose de départ du coup, qui tremble une fois
+      // l'élastique prêt (c'est la lueur dessinée plus bas qui le dit)
+      f = cadre(this.charge.action === 'pied' || this.charge.action === 'retourne' ? 'pied' : 'poing', 0);
+    } else if (this.invuln > CFG.invincibilite - 0.42 && this.invuln <= CFG.invincibilite){
+      // on vient d'encaisser : la grimace prime sur le reste
+      f = cadre('recevoir', this.invuln > CFG.invincibilite - 0.2 ? 0 : 1);
     } else if (!auSol){
-      pieds = b.velocity.y < 0 ? [[-7,-3],[7,-9]] : [[-8,-7],[9,-1]];
-      mains = b.velocity.y < 0 ? [[-6,EPAULE+7],[8,EPAULE-9]] : [[-9,EPAULE-5],[8,EPAULE+5]];
-    } else if (rampe){
-      pieds = []; mains = [];
-      for (const dec of [Math.PI, 0]){
-        const p = t * 2.2 + dec;
-        pieds.push([-11 + Math.cos(p)*5, 0]);
-        mains.push([2 + Math.cos(p)*9, EPAULE + 20 - Math.max(0, Math.sin(p))*3]);
-      }
-      // même correction de signe que la course : en rampant on bascule
-      // vers l'avant, tête vers le sol, pas en arrière
-      inclinaison = 0.30;
+      f = cadre('saut', b.velocity.y < -60 ? 1 : b.velocity.y > 60 ? 3 : 2);
     } else if (this.accroupi){
-      pieds = [[-10, 0], [9, 0]];
-      mains = [[-8, EPAULE + 15], [9, EPAULE + 14]];
-      inclinaison = -0.10;
+      f = cadre('saut', 0);   // la pose ramassée de l'appel du saut
     } else if (marche){
-      // appui, passage, poussée. Le pied colle au sol tant qu'il pousse,
-      // puis se lève d'un coup — d'où l'exposant sur la levée.
-      const foulee = 8 + allure * 8;
-      const genou  = 5 + allure * 16;
-      const bras   = 5 + allure * 8;
-      // le cycle des pieds recule avec l'allure : le pied se pose à peine
-      // devant les hanches et pousse loin derrière. Centré, il se posait
-      // 16 px devant — jambes en avant du corps, l'air de glisser.
-      const recul = allure * 6;
-      pieds = []; mains = [];
-      for (const dec of [Math.PI, 0]){
-        const p = t + dec;
-        const s = Math.sin(p);
-        const leve = Math.max(0, s);
-        pieds.push([-Math.cos(p)*foulee - recul, -Math.pow(leve, 0.62) * genou]);
-        // bras en opposition, la main passe devant la poitrine à la montée
-        mains.push([Math.cos(p)*bras + allure*2,
-                    EPAULE + 12 - Math.max(0, s)*(2 + allure*6) - allure*2]);
-      }
-      // rotation positive = tête vers l'avant (repère écran, y vers le
-      // bas) : le buste se penche DANS la course. L'ancien signe négatif
-      // le couchait en arrière, jambes devant.
-      inclinaison = 0.03 + allure*0.14;
+      const anim = allure > 0.72 ? 'course' : 'marche';
+      const n = CADRES_PERSO[anim].length;
+      // la phase avance avec la DISTANCE parcourue : pas de patinage
+      f = cadre(anim, Math.floor(((this.phase / (Math.PI*2)) % 1) * n));
     } else {
-      const souffle = Math.sin(this.time.now / 420) * 1.2;
-      pieds = [[-6, 0], [6, 0]];
-      mains = [[-7, EPAULE + 11 + souffle], [8, EPAULE + 9 + souffle]];
+      f = cadre('marche', 0);
     }
+    const flip = this.sens < 0;   // la planche regarde vers la droite
+    spr.setTexture('persoAtlas', f.nom);
+    spr.setFlipX(flip);
+    spr.setOrigin(flip ? 1 - f.c.ox : f.c.ox, f.c.oy);
+    spr.setPosition(this.joueur.x, this.joueur.y + PIEDS + 2);
+    spr.setScale(ECHELLE_PERSO * (1 + this.squash*0.22), ECHELLE_PERSO * (1 - this.squash*0.22));
+    spr.setAlpha(this.etat === 'jeu' && this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
 
-    const EP = EPAULE + tasse, HA = HANCHE + tasse, TE = TETE + tasse;
-    const my = i => mains[i][1] + tasse;
-
-    if (auSol){ g.fillStyle(0x000000, 0.28); g.fillEllipse(0, 1, 28, 7); }
-
-    this.membre(g, -1, EP, mains[0][0], my(0), 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
-    this.membre(g, -1, HA, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
-    g.fillStyle(0x171d33, 1); g.fillEllipse(pieds[0][0]+1, pieds[0][1]-1.5, 10, 6);
-
-    g.fillStyle(COUL.gi, 1);
-    g.fillPoints([{x:-7,y:EP},{x:7,y:EP},{x:6,y:HA+1},{x:-6,y:HA+1}], true);
-    g.lineStyle(2.4, COUL.col, 1);
-    g.beginPath(); g.moveTo(-3, EP-1); g.lineTo(2, EP+8); g.strokePath();
-    g.beginPath(); g.moveTo(5, EP-1); g.lineTo(2, EP+8); g.strokePath();
-    g.fillStyle(COUL.ceinture, 1);
-    g.fillRect(-7, HA-3, 14, 4);
-    g.fillRect(-7.5, HA-3, 3, 8);
-
-    this.membre(g, 1, HA, pieds[1][0], pieds[1][1], 9.5*etJ, 9.5*etJ, -1, COUL.gi, COUL.gi, 9, 7.5);
-    g.fillStyle(COUL.botte, 1); g.fillEllipse(pieds[1][0]+1, pieds[1][1]-1.5, 11, 6.4);
-    this.membre(g, 1, EP, mains[1][0], my(1), 8*etB, 8*etB, 1, COUL.gi, COUL.peau, 7.5, 5.5);
-    if (this.arme){
-      const a = ARMES[this.arme];
-      g.fillStyle(a.couleur, 1); g.fillCircle(mains[1][0], my(1), 4.4);
-      g.fillStyle(a.clair, 1);   g.fillCircle(mains[1][0], my(1), 2.2);
-    } else {
-      g.fillStyle(COUL.ceinture, 1); g.fillCircle(mains[1][0], my(1), 2.6);
+    // l'ombre au sol et la lueur de charge restent dessinées à la main
+    g.setPosition(this.joueur.x, this.joueur.y + PIEDS);
+    g.setScale(this.sens, 1); g.setRotation(0); g.setAlpha(1);
+    if (auSol && this.etat !== 'perdu' && this.etat !== 'gameover'){
+      g.fillStyle(0x000000, 0.28); g.fillEllipse(0, 1, 28, 7);
     }
-
     if (this.charge){
       const k = Math.min(1, this.charge.t / CFG.seuilElastique);
-      const cx = this.charge.action === 'pied' ? pieds[1][0] : mains[1][0];
-      const cy = this.charge.action === 'pied' ? pieds[1][1] : my(1);
+      const bas = this.charge.action === 'pied';
+      const cy = bas ? -8 : -26;
       g.fillStyle(this.charge.pret ? 0xffd166 : 0x4dd6c1, 0.28 + 0.25*k);
-      g.fillCircle(cx, cy, 4 + k*5);
-      if (this.charge.pret){ g.fillStyle(0xffffff, 0.85); g.fillCircle(cx, cy, 2); }
+      g.fillCircle(13, cy, 4 + k*5);
+      if (this.charge.pret){ g.fillStyle(0xffffff, 0.85); g.fillCircle(13, cy, 2); }
     }
-
-    const hx = 1, hy = TE;
-    g.fillStyle(COUL.cheveux, 1);
-    const pointes = [[-7,3],[-9,-3],[-13,-7],[-7,-6],[-10,-13],[-3,-8],[0,-15],[3,-7],[9,-11],[6,-3],[10,-4],[7,1]];
-    g.fillPoints(pointes.map(p => ({ x: hx + p[0], y: hy + p[1] })), true);
-    g.fillStyle(COUL.peau, 1); g.fillCircle(hx+1, hy, 5.6);
-    g.fillStyle(COUL.cheveux, 1);
-    g.fillEllipse(hx+0.5, hy-4.6, 11.6, 5);
-    g.fillRect(hx+2.5, hy-1.6, 2, 2.6);
-
-    g.setPosition(this.joueur.x, this.joueur.y + PIEDS);
-    g.setRotation(this.sens * inclinaison);
-    g.setScale(this.sens * (1 + this.squash*0.22), 1 - this.squash*0.22);
-    g.setAlpha(this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
   },
+
   membre(g, hx, hy, tx, ty, l1, l2, sens, c1, c2, e1, e2){
     const dx = tx-hx, dy = ty-hy;
     const d = Math.min(Math.hypot(dx, dy), l1+l2-0.001) || 0.001;

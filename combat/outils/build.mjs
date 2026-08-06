@@ -21,6 +21,7 @@ const src = join(ici, '..', 'src');
 const ORDRE = [
   'version.js',    // numéro de version + rechargement si le serveur a plus récent
   'reglages.js',   // CFG, COUPS, ARMES, MONSTRES, couleurs : l'équilibrage
+  'sprites.js',    // atlas pixel-art du héros, incrusté en base64
   'niveaux.js',    // les étages, du trottoir au toit
   'partie.js',     // graine, état porté d'un étage à l'autre, record
   'son.js',        // tout l'audio, synthétisé
