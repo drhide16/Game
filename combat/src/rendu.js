@@ -556,7 +556,14 @@ Object.assign(Combat.prototype, {
     spr.setFlipX(flip);
     spr.setOrigin(flip ? 1 - f.c.ox : f.c.ox, f.c.oy);
     spr.setPosition(this.joueur.x, this.joueur.y + PIEDS + 2);
-    spr.setScale(ECHELLE_PERSO * (1 + this.squash*0.22), ECHELLE_PERSO * (1 - this.squash*0.22));
+    // un coup (ou un coup qui s'arme) donné accroupi : la planche n'a
+    // pas ces poses, on tasse le sprite — la frappe reste basse à l'œil
+    const basQuiFrappe = (this.attaque && this.attaque.bas) || (this.charge && this.accroupi);
+    spr.setScale(ECHELLE_PERSO * (1 + this.squash*0.22),
+                 ECHELLE_PERSO * (1 - this.squash*0.22) * (basQuiFrappe ? 0.72 : 1));
+    // l'élastique n'a pas de bras étiré en pixel-art : le corps s'embrase
+    if (this.attaque && this.attaque.elastique) spr.setTint(0xffd166);
+    else spr.clearTint();
     spr.setAlpha(this.etat === 'jeu' && this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
 
     // l'ombre au sol et la lueur de charge restent dessinées à la main

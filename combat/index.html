@@ -260,7 +260,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '17';
+const VERSION = '18';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -1031,7 +1031,8 @@ class Combat extends Phaser.Scene {
     this.attaque = { type, t:0, bas:this.accroupi, elastique: !!elastique && !!c.portee, touches:new Set() };
     if (this.attaque.elastique) this.crier(this.joueur.x, this.joueur.y - 32, CRIS.kiai, '#ffd166', 15);
     SON.jouer(c.son);
-    if (c.secousse) this.cameras.main.shake(90, c.secousse);
+    // pas de secousse ici : l'écran ne tremble qu'à l'IMPACT (frapper,
+    // casser) — un coup dans le vide ne secoue plus rien
     if (c.tir) this.tirer(c);
     if (c.jet) this.ejecterSegment(c);
     if (c.elan && this.joueur.body.blocked.down && !this.accroupi)
@@ -1126,6 +1127,7 @@ class Combat extends Phaser.Scene {
       m.go.body.setVelocity(dir * recul * (m.def.boss ? 0.35 : 1), m.def.vole ? 0 : -160);
     }
     SON.jouer('touche');
+    this.cameras.main.shake(90, ecrase ? 0.006 : 0.0045);
     this.eclat(m.go.x, m.go.y, dir);
     if (m.pv > 0) this.crier(m.go.x, hautCri, ecrase ? CRIS.ecrase : CRIS.coup);
     if (m.pv <= 0){
@@ -1148,6 +1150,7 @@ class Combat extends Phaser.Scene {
   casser(k, degats){
     k.pv -= degats; k.flash = 0.12;
     SON.jouer('caisse');
+    this.cameras.main.shake(70, 0.003);
     this.eclat(k.go.x, k.go.y - 4, this.sens, 5);
     if (k.pv <= 0){
       k.casse = true;
@@ -2272,7 +2275,14 @@ Object.assign(Combat.prototype, {
     spr.setFlipX(flip);
     spr.setOrigin(flip ? 1 - f.c.ox : f.c.ox, f.c.oy);
     spr.setPosition(this.joueur.x, this.joueur.y + PIEDS + 2);
-    spr.setScale(ECHELLE_PERSO * (1 + this.squash*0.22), ECHELLE_PERSO * (1 - this.squash*0.22));
+    // un coup (ou un coup qui s'arme) donné accroupi : la planche n'a
+    // pas ces poses, on tasse le sprite — la frappe reste basse à l'œil
+    const basQuiFrappe = (this.attaque && this.attaque.bas) || (this.charge && this.accroupi);
+    spr.setScale(ECHELLE_PERSO * (1 + this.squash*0.22),
+                 ECHELLE_PERSO * (1 - this.squash*0.22) * (basQuiFrappe ? 0.72 : 1));
+    // l'élastique n'a pas de bras étiré en pixel-art : le corps s'embrase
+    if (this.attaque && this.attaque.elastique) spr.setTint(0xffd166);
+    else spr.clearTint();
     spr.setAlpha(this.etat === 'jeu' && this.invuln > 0 && Math.floor(this.invuln*20) % 2 === 0 ? 0.35 : 1);
 
     // l'ombre au sol et la lueur de charge restent dessinées à la main
