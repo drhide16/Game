@@ -370,48 +370,49 @@ Object.assign(Combat.prototype, {
 
   dessinerCaisses(){
     const g = this.gCaisses; g.clear();
+    const dt = this.game.loop.delta / 1000;
     for (const k of this.caisses){
-      const x = k.go.x, y = k.go.y, clair = k.flash > 0;
-      g.fillStyle(0x000000, 0.25); g.fillEllipse(x, y+16, 30, 6);
-      g.fillStyle(clair ? 0xffffff : COUL.bois, 1);       g.fillRect(x-15, y-15, 30, 30);
-      g.fillStyle(clair ? 0xffffff : COUL.boisClair, 1);  g.fillRect(x-11, y-11, 22, 22);
-      g.lineStyle(3, clair ? 0xffffff : COUL.boisOmbre, 1);
-      g.beginPath(); g.moveTo(x-11, y-11); g.lineTo(x+11, y+11); g.strokePath();
-      g.beginPath(); g.moveTo(x+11, y-11); g.lineTo(x-11, y+11); g.strokePath();
+      if (k.casse){
+        // les débris s'effacent doucement
+        k.efface = Math.max(0, k.efface - dt);
+        k.img.setAlpha(Math.min(1, k.efface / 0.6));
+        if (k.efface <= 0) k.img.setVisible(false);
+        continue;
+      }
+      g.fillStyle(0x000000, 0.25); g.fillEllipse(k.go.x, k.go.y + 16, 30, 6);
+      if (k.flash > 0) k.img.setTintFill(0xffffff); else k.img.clearTint();
+    }
+    // et les blocs bonus : flottent, se compriment au coup, s'éteignent
+    for (const bl of this.blocs){
+      const flotte = bl.plein ? Math.sin(bl.phase) * 3 : 0;
+      bl.img.setPosition(bl.x, bl.y + flotte);
+      if (bl.frappe > 0){
+        bl.img.setTexture('decorAtlas', 'blocFrappe');
+        bl.img.setScale(46 / CADRES_DECOR.blocFrappe.h);
+      } else {
+        bl.img.setTexture('decorAtlas', bl.plein ? 'blocPlein' : 'blocVide');
+        bl.img.setScale(46 / CADRES_DECOR.blocPlein.h);
+      }
     }
   },
   dessinerObjets(){
+    // cœur, étoile de vie et runes de pouvoir : les images de la
+    // planche bonus, avec un halo à la couleur de l'objet
     const g = this.gObjets; g.clear();
+    const CADRE = { vie:'etoile', coeur:'coeur', pistolet:'runeFeu', fusil:'runeTriple', laser:'runeAqua' };
+    const HALO  = { vie:0xffd166, coeur:0xe2584d, pistolet:0xffb347, fusil:0xff7b54, laser:0x7b9bff };
+    let oi = 0;
     for (const o of this.objets){
-      const x = o.go.x, y = o.go.y + Math.sin(o.phase)*2.5;
-      if (o.type === 'vie'){
-        // une VIE : cœur doré à petites ailes, halo appuyé — il ne doit
-        // pas se confondre avec le cœur de soin rouge
-        const bat = Math.sin(o.phase * 2) * 2;
-        g.fillStyle(0xffd166, 0.22); g.fillCircle(x, y, 17);
-        g.fillStyle(0xfff0c2, 0.9);
-        g.fillTriangle(x-8, y-4, x-16, y-9+bat, x-8, y+2);
-        g.fillTriangle(x+8, y-4, x+16, y-9+bat, x+8, y+2);
-        g.fillStyle(0xffd166, 1);
-        g.fillCircle(x-4, y-3, 5); g.fillCircle(x+4, y-3, 5);
-        g.fillTriangle(x-9, y, x+9, y, x, y+10);
-        g.fillStyle(0xffffff, 0.9); g.fillCircle(x-4, y-5, 1.8);
-        continue;
-      }
-      if (o.type === 'coeur'){
-        g.fillStyle(0xe2584d, 0.18); g.fillCircle(x, y, 15);
-        g.fillStyle(0xe2584d, 1);
-        g.fillCircle(x-4, y-3, 5); g.fillCircle(x+4, y-3, 5);
-        g.fillTriangle(x-9, y, x+9, y, x, y+10);
-        g.fillStyle(0xff9d9d, 0.85); g.fillCircle(x-4, y-5, 1.8);
-      } else {
-        const a = ARMES[o.type];
-        g.fillStyle(a.couleur, 0.2); g.fillCircle(x, y, 16);
-        g.lineStyle(5, a.couleur, 1); g.strokeCircle(x, y, 8);
-        g.lineStyle(2, a.clair, 1);   g.strokeCircle(x, y, 8);
-        g.fillStyle(0xffffff, 0.9);   g.fillCircle(x, y - 8, 2.6);
-      }
+      const img = this.imgObjets[oi++];
+      if (!img) break;
+      const y = o.go.y + Math.sin(o.phase) * 2.5;
+      const nom = CADRE[o.type] || 'coeur';
+      const c = CADRES_DECOR[nom];
+      g.fillStyle(HALO[o.type] || 0xffffff, 0.18); g.fillCircle(o.go.x, y, 16);
+      img.setVisible(true).setTexture('decorAtlas', nom)
+         .setPosition(o.go.x, y).setScale(Math.min(26 / c.h, 56 / c.w));
     }
+    for (let i = oi; i < this.imgObjets.length; i++) this.imgObjets[i].setVisible(false);
   },
   dessinerMonstres(){
     const g = this.gMonstres; g.clear();
