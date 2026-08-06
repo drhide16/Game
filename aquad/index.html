@@ -262,7 +262,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '6';
+const VERSION = '7';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -1766,10 +1766,14 @@ Object.assign(Aquad.prototype, {
     const g = d.g; g.clear();
     const P = this.iso(d.x, d.y);
     if (d.type === 'rocher'){
+      // un rocher en volume : assise large, dôme principal, seconde
+      // bosse, calottes éclairées côté soleil
       g.fillStyle(0x000000, 0.18); g.fillEllipse(P.x + SOLEIL.x*1.5, P.y + 12 + SOLEIL.y*0.5, 48, 14);
-      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(P.x, P.y, 46, 34);
-      g.fillStyle(COUL.rocher, 1); g.fillEllipse(P.x - 4, P.y - 6, 36, 24);
-      g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(P.x - 10, P.y - 10, 14, 8);
+      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(P.x, P.y + 4, 46, 20);
+      g.fillStyle(COUL.rocher, 1); g.fillEllipse(P.x - 2, P.y - 8, 40, 28);
+      g.fillStyle(COUL.rocher, 1); g.fillEllipse(P.x + 14, P.y - 2, 20, 16);
+      g.fillStyle(0xb8bcc8, 0.75); g.fillEllipse(P.x - 10, P.y - 14, 16, 9);
+      g.fillStyle(0xb8bcc8, 0.5); g.fillEllipse(P.x + 12, P.y - 7, 8, 5);
       return;
     }
     // palmier : le pied au corps physique, la tête bien plus haut —
@@ -1797,16 +1801,29 @@ Object.assign(Aquad.prototype, {
     if ((this.time.now / 120 | 0) % 3 === 0) this.dessinerDecor(d);
   },
 
+  // un cube isométrique posé au sol : dessus en losange, deux faces.
+  // (x, y) est le centre de la base, l le côté, h la hauteur.
+  cube(g, x, y, l, h, dessus, gauche, droite){
+    const w = l/2, r = l/4, ty = y - h;
+    g.fillStyle(gauche, 1);
+    g.fillPoints([{x:x-w,y:ty},{x:x,y:ty+r},{x:x,y:ty+r+h},{x:x-w,y:ty+h}], true);
+    g.fillStyle(droite, 1);
+    g.fillPoints([{x:x,y:ty+r},{x:x+w,y:ty},{x:x+w,y:ty+h},{x:x,y:ty+r+h}], true);
+    g.fillStyle(dessus, 1);
+    g.fillPoints([{x:x,y:ty-r},{x:x+w,y:ty},{x:x,y:ty+r},{x:x-w,y:ty}], true);
+  },
+
   dessinerPierres(){
     for (const p of this.pierres){
       const g = p.g; g.clear();
       const P = this.iso(p.go.x, p.go.y);
       g.setDepth(P.y);
       const x = P.x, y = P.y;
+      // un galet en volume : l'assise, le dôme, la calotte éclairée
       g.fillStyle(0x000000, 0.18); g.fillEllipse(x + SOLEIL.x, y + 7 + SOLEIL.y*0.5, 20, 6);
-      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(x, y, 18, 13);
-      g.fillStyle(COUL.rocher, 1); g.fillEllipse(x - 2, y - 2, 14, 9);
-      g.fillStyle(0xb8bcc8, 0.7); g.fillEllipse(x - 4, y - 4, 6, 3);
+      g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(x, y + 2, 18, 9);
+      g.fillStyle(COUL.rocher, 1); g.fillEllipse(x, y - 3, 16, 12);
+      g.fillStyle(0xb8bcc8, 0.8); g.fillEllipse(x - 3, y - 6, 9, 5);
     }
   },
 
@@ -1815,13 +1832,18 @@ Object.assign(Aquad.prototype, {
       const g = k.g; g.clear();
       const P = this.iso(k.go.x, k.go.y);
       g.setDepth(P.y);
-      const x = P.x, y = P.y, clair = k.flash > 0;
-      g.fillStyle(0x000000, 0.2); g.fillEllipse(x + SOLEIL.x, y + 12 + SOLEIL.y*0.5, 34, 10);
-      g.fillStyle(clair ? 0xffffff : COUL.bois, 1);      g.fillRect(x-15, y-16, 30, 28);
-      g.fillStyle(clair ? 0xffffff : COUL.boisClair, 1); g.fillRect(x-11, y-12, 22, 20);
-      g.lineStyle(3, clair ? 0xffffff : COUL.boisOmbre, 1);
-      g.beginPath(); g.moveTo(x-11, y-12); g.lineTo(x+11, y+8); g.strokePath();
-      g.beginPath(); g.moveTo(x+11, y-12); g.lineTo(x-11, y+8); g.strokePath();
+      const x = P.x, y = P.y + 6, clair = k.flash > 0;
+      g.fillStyle(0x000000, 0.2); g.fillEllipse(x + SOLEIL.x, y + 2 + SOLEIL.y*0.5, 36, 11);
+      // un vrai cube posé sur le sol isométrique
+      this.cube(g, x, y, 30, 20,
+        clair ? 0xffffff : COUL.boisClair,
+        clair ? 0xffffff : COUL.bois,
+        clair ? 0xffffff : COUL.boisOmbre);
+      // les planches croisées du couvercle
+      g.lineStyle(2.5, clair ? 0xffffff : COUL.boisOmbre, 1);
+      const ty = y - 20;
+      g.beginPath(); g.moveTo(x - 15, ty); g.lineTo(x + 15, ty); g.strokePath();
+      g.beginPath(); g.moveTo(x, ty - 7.5); g.lineTo(x, ty + 7.5); g.strokePath();
     }
   },
 
@@ -1860,8 +1882,16 @@ Object.assign(Aquad.prototype, {
         const px = x + s * 14*e, py = y - 2 + i * 6*e + (Math.sin(m.phase*2 + i) * 2);
         g.beginPath(); g.moveTo(x + s*8*e, y + (i-1)*4*e); g.lineTo(px, py); g.strokePath();
       }
-    g.fillStyle(ombre, 1); g.fillEllipse(x, y + 2*e + dandine*0.4, 28*e, 18*e);
-    g.fillStyle(corps, 1); g.fillEllipse(x, y - 2*e + dandine*0.4, 26*e, 18*e);
+    g.fillStyle(ombre, 1); g.fillEllipse(x, y + 2*e + dandine*0.4, 28*e, 16*e);
+    g.fillStyle(corps, 1); g.fillEllipse(x, y - 2*e + dandine*0.4, 26*e, 16*e);
+    // le dessus de la carapace attrape la lumière : c'est un dôme
+    g.fillStyle(0xffffff, 0.18); g.fillEllipse(x - 3*e, y - 6*e + dandine*0.4, 15*e, 6*e);
+    if (m.def.gros){
+      // la coquille du bernard-l'ermite : une spirale sur le dôme
+      g.lineStyle(2.5*e, m.flash > 0 ? 0xffffff : m.def.ombre, 0.85);
+      g.beginPath(); g.arc(x + 2*e, y - 3*e + dandine*0.4, 8*e, -2.6, 0.6); g.strokePath();
+      g.beginPath(); g.arc(x + 3*e, y - 2*e + dandine*0.4, 4*e, -2.2, 1.4); g.strokePath();
+    }
     // pinces vers le joueur (comparaison à l'écran : positions projetées)
     const vers = Math.sign(this.iso(this.joueurs[0].go.x, this.joueurs[0].go.y).x - x) || 1;
     g.fillStyle(corps, 1);
@@ -1889,7 +1919,9 @@ Object.assign(Aquad.prototype, {
     }
     g.fillStyle(eclaire || m.def.ombre, 1); g.fillEllipse(x, y, 24*e, 18*e);
     g.fillStyle(corps, 0.92); g.fillEllipse(x, y - 3*e, 22*e, 14*e);
-    g.fillStyle(0xffffff, 0.35); g.fillEllipse(x - 5*e, y - 6*e, 8*e, 5*e);
+    // la cloche : un dôme qui attrape la lumière côté soleil
+    g.fillStyle(0xffffff, 0.35); g.fillEllipse(x - 4*e, y - 7*e, 12*e, 6*e);
+    g.fillStyle(0xffffff, 0.18); g.fillEllipse(x, y - 4*e, 18*e, 8*e);
     const vers = Math.sign(this.iso(this.joueurs[0].go.x, this.joueurs[0].go.y).x - x) || 1;
     g.fillStyle(m.def.oeil, 1);
     g.fillCircle(x + vers*2 - 4*e, y - 2*e, 2*e); g.fillCircle(x + vers*2 + 4*e, y - 2*e, 2*e);
@@ -1978,9 +2010,13 @@ Object.assign(Aquad.prototype, {
     const lev = (marche && !j.attaque) ? Math.abs(Math.sin(t)) * 2 : 0;
     g.save();
     g.translateCanvas(0, -lev);
-    // pendant un coup, tout le corps se fend vers la direction du coup,
-    // telle qu'elle se voit à l'écran
-    if (j.attaque) g.rotateCanvas(sens === 1 ? Math.atan2(sfy, sfx) : Math.atan2(sfy, -sfx));
+    // pendant un coup, le corps reste DEBOUT : juste un penché plafonné
+    // vers la frappe — la fente, le membre tendu et l'ellipse au sol
+    // disent déjà la direction
+    if (j.attaque){
+      const angEcran = sens === 1 ? Math.atan2(sfy, sfx) : Math.atan2(sfy, -sfx);
+      g.rotateCanvas(Phaser.Math.Clamp(angEcran, -0.3, 0.3));
+    }
 
     this.membre(g, -1, EPAULE, mains[0][0], mains[0][1], 8, 8, 1, COUL.giOmbre, COUL.peauOmbre, 7, 5);
     this.membre(g, -1, HANCHE, pieds[0][0], pieds[0][1], 9.5, 9.5, -1, COUL.giOmbre, COUL.giOmbre, 8.5, 7);
@@ -2052,11 +2088,10 @@ Object.assign(Aquad.prototype, {
     if (j.porte){
       const oy = TETE - 12 + Math.sin(this.time.now / 300) * 1.2;
       if (j.porte.type === 'caisse'){
-        g.fillStyle(COUL.bois, 1);      g.fillRect(-12, oy - 20, 24, 20);
-        g.fillStyle(COUL.boisClair, 1); g.fillRect(-9, oy - 17, 18, 14);
-        g.lineStyle(2.5, COUL.boisOmbre, 1);
-        g.beginPath(); g.moveTo(-9, oy - 17); g.lineTo(9, oy - 3); g.strokePath();
-        g.beginPath(); g.moveTo(9, oy - 17); g.lineTo(-9, oy - 3); g.strokePath();
+        // le même cube que par terre, en plus petit, posé sur les mains
+        this.cube(g, 0, oy, 24, 15, COUL.boisClair, COUL.bois, COUL.boisOmbre);
+        g.lineStyle(2, COUL.boisOmbre, 1);
+        g.beginPath(); g.moveTo(-12, oy - 15); g.lineTo(12, oy - 15); g.strokePath();
       } else {
         g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(0, oy - 9, 20, 14);
         g.fillStyle(COUL.rocher, 1);      g.fillEllipse(-2, oy - 11, 15, 10);
@@ -2166,10 +2201,15 @@ Object.assign(Aquad.prototype, {
     if (j.attaque && COUPS[j.attaque.type].portee && !COUPS[j.attaque.type].faisceau){
       const c = COUPS[j.attaque.type];
       if (j.attaque.t >= c.debut && j.attaque.t <= c.fin + 0.06){
+        // la surface de contact est dessinée SUR le sol, à travers la
+        // même projection que lui : un cercle monde, exactement couché
         const z = this.zoneAttaque(j);
-        const Pz = this.iso(z.rect.centerX, z.rect.centerY);
+        gC.save();
+        gC.scaleCanvas(1, 0.5);
+        gC.rotateCanvas(Math.PI / 4);
         gC.lineStyle(4, 0xffffff, 0.5);
-        gC.strokeEllipse(Pz.x, Pz.y, z.rect.width * 0.9, z.rect.width * 0.45);
+        gC.strokeCircle(z.rect.centerX, z.rect.centerY, z.rect.width * 0.45);
+        gC.restore();
       }
     }
     for (const t of this.tirs){
@@ -2182,10 +2222,8 @@ Object.assign(Aquad.prototype, {
         g.translateCanvas(P.x, P.y - 16);
         g.rotateCanvas((0.9 - t.vie) * 9 * Math.sign(t.vx || 1));
         if (t.type === 'caisse'){
-          g.fillStyle(COUL.bois, 1);      g.fillRect(-11, -10, 22, 20);
-          g.fillStyle(COUL.boisClair, 1); g.fillRect(-8, -7, 16, 14);
-          g.lineStyle(2.5, COUL.boisOmbre, 1);
-          g.beginPath(); g.moveTo(-8, -7); g.lineTo(8, 7); g.strokePath();
+          // le cube qui tournoie en vol
+          this.cube(g, 0, 8, 22, 14, COUL.boisClair, COUL.bois, COUL.boisOmbre);
         } else {
           g.fillStyle(COUL.rocherOmbre, 1); g.fillEllipse(0, 0, 17, 12);
           g.fillStyle(COUL.rocher, 1);      g.fillEllipse(-2, -2, 13, 8);
