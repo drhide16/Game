@@ -23,14 +23,74 @@ class Aquad extends Phaser.Scene {
   // l'inverse : d'un vecteur écran vers un vecteur monde (pour le joystick)
   isoInv(px, py){ return { x: px / (2*ISO_C) + py / (2*ISO_S), y: -px / (2*ISO_C) + py / (2*ISO_S) }; }
 
+  // ── le chemin de terre : une chaîne de disques qui serpente ──
+  // Généré par la graine : mourir et réapparaître ne redessine pas la
+  // carte. Chaque disque chevauche le suivant — le chemin est marchable
+  // de bout en bout — et quelques nœuds larges font les prairies.
+  construireChemin(){
+    const n = this.def.noeuds || 9;
+    const yMin = MARGE_EAU + 170, yMax = MARGE_EAU + this.def.hauteur - 170;
+    // les prairies : réparties dans le ventre du chemin, jamais aux bouts
+    const prairies = new Set();
+    const nb = this.def.prairies || 2;
+    for (let k = 0; k < nb; k++)
+      prairies.add(1 + Math.floor((k + 0.5) * (n - 2) / nb));
+    this.noeuds = [];
+    let x = MARGE_EAU + 200;
+    let y = MARGE_EAU + this.def.hauteur / 2;
+    let angle = 0, rPrec = 0;
+    for (let i = 0; i < n; i++){
+      const prairie = prairies.has(i);
+      const r = prairie ? 240 + this.alea() * 70 : 120 + this.alea() * 40;
+      if (i > 0){
+        // cap globalement vers l'est, avec un méandre borné ; le pas
+        // garantit le chevauchement des disques voisins
+        angle = Phaser.Math.Clamp(angle + (this.alea() * 2 - 1) * 0.85, -1.1, 1.1);
+        const pas = (rPrec + r) * 0.75;
+        x += Math.cos(angle) * pas;
+        y = Phaser.Math.Clamp(y + Math.sin(angle) * pas, yMin, yMax);
+      }
+      this.noeuds.push({ x, y, r, prairie });
+      rPrec = r;
+    }
+    this.depart = this.noeuds[0];
+    this.arrivee = this.noeuds[this.noeuds.length - 1];
+  }
+  surTerre(x, y, marge){
+    marge = marge || 0;
+    return this.noeuds.some(nd => Math.hypot(x - nd.x, y - nd.y) < nd.r - marge);
+  }
+  // hors de la terre ? on reprojette le corps sur le bord du disque le
+  // plus proche, en GARDANT la vitesse : on glisse le long de la côte
+  contenir(go, marge){
+    if (this.surTerre(go.x, go.y, marge)) return;
+    let meilleur = null, moinsLoin = Infinity;
+    for (const nd of this.noeuds){
+      const d = Math.hypot(go.x - nd.x, go.y - nd.y) - (nd.r - marge);
+      if (d < moinsLoin){ moinsLoin = d; meilleur = nd; }
+    }
+    const d = Math.hypot(go.x - meilleur.x, go.y - meilleur.y) || 1;
+    const k = (meilleur.r - marge) / d;
+    const nx = meilleur.x + (go.x - meilleur.x) * k;
+    const ny = meilleur.y + (go.y - meilleur.y) * k;
+    go.body.position.x += nx - go.x;
+    go.body.position.y += ny - go.y;
+  }
+
   create(){
     this.def = NIVEAUX[Math.min(PARTIE.niveau, NIVEAUX.length - 1)];
     this.D = DIFFICULTES[PARTIE.difficulte] || DIFFICULTES.moyen;
     this.alea = generateur(GRAINE + PARTIE.niveau * 7919);
+    this.construireChemin();
 
-    // l'île va de (MARGE_EAU, MARGE_EAU) à (MARGE_EAU+largeur, MARGE_EAU+hauteur)
-    this.ileX = MARGE_EAU; this.ileY = MARGE_EAU;
-    this.ileL = this.def.largeur; this.ileH = this.def.hauteur;
+    // l'enveloppe : la boîte englobante des disques, avec l'eau autour
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const nd of this.noeuds){
+      bx0 = Math.min(bx0, nd.x - nd.r); by0 = Math.min(by0, nd.y - nd.r);
+      bx1 = Math.max(bx1, nd.x + nd.r); by1 = Math.max(by1, nd.y + nd.r);
+    }
+    this.ileX = bx0; this.ileY = by0;
+    this.ileL = bx1 - bx0; this.ileH = by1 - by0;
     const mondeL = this.ileL + MARGE_EAU*2, mondeH = this.ileH + MARGE_EAU*2;
 
     this.etat = 'jeu';
@@ -41,10 +101,17 @@ class Aquad extends Phaser.Scene {
     this.msg = null; this.transition = 0;
     this.monstres = []; this.decors = []; this.pierres = [];
 
-    // le joueur ne sort pas de la terre : les limites physiques SONT l'île
-    this.physics.world.setBounds(this.ileX, this.ileY, this.ileL, this.ileH);
-    // la caméra vit en espace ÉCRAN : les bornes sont le losange projeté
-    this.cameras.main.setBounds(-mondeH * ISO_C, 0, (mondeL + mondeH) * ISO_C, (mondeL + mondeH) * ISO_S);
+    // les limites physiques sont larges : le confinement fin sur la
+    // terre, c'est contenir() qui le fait disque par disque
+    this.physics.world.setBounds(this.ileX - 60, this.ileY - 60, this.ileL + 120, this.ileH + 120);
+    // la caméra vit en espace ÉCRAN : les bornes sont la projection de
+    // l'enveloppe (eau comprise)
+    const wx0 = this.ileX - MARGE_EAU, wy0 = this.ileY - MARGE_EAU;
+    const wx1 = this.ileX + this.ileL + MARGE_EAU, wy1 = this.ileY + this.ileH + MARGE_EAU;
+    this.cameras.main.setBounds(
+      (wx0 - wy1) * ISO_C, (wx0 + wy0) * ISO_S,
+      (wx1 - wy0) * ISO_C - (wx0 - wy1) * ISO_C,
+      (wx1 + wy1) * ISO_S - (wx0 + wy0) * ISO_S);
 
     this.gSol    = this.add.graphics().setDepth(-10);   // eau et terre, en coordonnées monde
     this.gSortie = this.add.graphics().setDepth(-4);
@@ -54,7 +121,7 @@ class Aquad extends Phaser.Scene {
 
     // ── l'entité joueur ──
     const j = {
-      go: this.add.rectangle(this.ileX + 130, this.ileY + this.ileH/2, 26, 24, 0xffffff, 0),
+      go: this.add.rectangle(this.depart.x, this.depart.y, 26, 24, 0xffffff, 0),
       fx: 1, fy: 0,                 // direction regardée (normalisée)
       phase: 0,
       pv: PARTIE.pv, invuln: CFG.invulnRenais,
@@ -105,16 +172,27 @@ class Aquad extends Phaser.Scene {
     this.message(this.def.nom + '  —  ' + this.def.sous);
   }
 
-  // ── construction de l'île ───────────────────────────────────
+  // ── construction du chemin ──────────────────────────────────
   poseLibre(marge){
-    // une position sur la terre, pas trop près du bord ni du départ
-    for (let e = 0; e < 40; e++){
-      const x = this.ileX + marge + this.alea() * (this.ileL - marge*2);
-      const y = this.ileY + marge + this.alea() * (this.ileH - marge*2);
-      if (Math.hypot(x - (this.ileX + 130), y - (this.ileY + this.ileH/2)) < 220) continue;
+    // un nœud tiré au poids de son aire (les prairies reçoivent plus),
+    // puis un point uniforme dans son disque — jamais aux abords du départ
+    const poids = this.noeuds.map(nd => nd.r * nd.r);
+    const total = poids.reduce((a, b) => a + b, 0);
+    for (let e = 0; e < 60; e++){
+      let tirage = this.alea() * total, nd = this.noeuds[0];
+      for (let i = 0; i < this.noeuds.length; i++){
+        tirage -= poids[i];
+        if (tirage <= 0){ nd = this.noeuds[i]; break; }
+      }
+      const libre = Math.max(10, nd.r - marge - 30);
+      const a = this.alea() * Math.PI * 2;
+      const dist = Math.sqrt(this.alea()) * libre;
+      const x = nd.x + Math.cos(a) * dist, y = nd.y + Math.sin(a) * dist;
+      if (Math.hypot(x - this.depart.x, y - this.depart.y) < 220) continue;
       if (this.decors.every(d => Math.hypot(x - d.x, y - d.y) > 90)) return { x, y };
     }
-    return { x: this.ileX + this.ileL/2, y: this.ileY + this.ileH/2 };
+    const milieu = this.noeuds[Math.floor(this.noeuds.length / 2)];
+    return { x: milieu.x, y: milieu.y };
   }
   creerObstacle(type){
     const p = this.poseLibre(90);
@@ -172,10 +250,8 @@ class Aquad extends Phaser.Scene {
       const type = this.def.peuple[Math.floor(this.alea() * this.def.peuple.length)];
       this.creerMonstre(type, p.x, p.y);
     }
-    // le boss garde le ponton, à l'est de l'île
-    this.pontonY = this.ileY + this.ileH/2;
-    this.boss = this.creerMonstre(this.def.boss,
-      this.ileX + this.ileL - 220, this.pontonY);
+    // le boss garde le ponton, au dernier nœud du chemin
+    this.boss = this.creerMonstre(this.def.boss, this.arrivee.x - 40, this.arrivee.y);
     this.bossVivant = true;
   }
 
@@ -532,6 +608,12 @@ class Aquad extends Phaser.Scene {
     this.majJoueur(j, dt);
     this.majMonstres(dt);
     this.majTirs(dt);
+    // personne ne marche sur l'eau : le joueur, les monstres au sol et
+    // les objets sont reprojetés sur la terre — sauf les flottants, qui
+    // survolent l'eau (c'est leur avantage)
+    this.contenir(j.go, 8);
+    for (const m of this.monstres) if (!m.def.flotte) this.contenir(m.go, 6);
+    for (const o of this.objets) this.contenir(o.go, 0);
     // l'anneau au sol dit qui serait touché si on frappait maintenant —
     // la même recherche que l'aimantation, donc il dit toujours vrai
     this.cibleVisee = this.chercherCible(j, CFG.aimantPortee, CFG.aimantCone);
@@ -550,8 +632,8 @@ class Aquad extends Phaser.Scene {
       if (this.msg.t > 2.2) this.msg = null;
     }
 
-    // le ponton : à l'est, une fois le boss à terre
-    if (j.go.x > this.ileX + this.ileL - 24 && Math.abs(j.go.y - this.pontonY) < 56){
+    // le ponton : au bout du chemin, une fois le boss à terre
+    if (Math.hypot(j.go.x - (this.arrivee.x + this.arrivee.r - 10), j.go.y - this.arrivee.y) < 70){
       if (this.bossVivant){
         if (!this.avertiBoss){
           this.avertiBoss = true;
@@ -691,8 +773,8 @@ class Aquad extends Phaser.Scene {
       this.poussiere(j.go.x, j.go.y + 10);
     } else if (signe !== j.pasSigne) j.pasSigne = signe;
 
-    // point de retour : là où on marchait sain et sauf
-    if (j.invuln <= 0){
+    // point de retour : là où on marchait sain et sauf, SUR la terre
+    if (j.invuln <= 0 && this.surTerre(j.go.x, j.go.y, 10)){
       this.checkpoint.x = j.go.x;
       this.checkpoint.y = j.go.y;
     }
