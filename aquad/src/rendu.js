@@ -410,12 +410,15 @@ Object.assign(Aquad.prototype, {
     const allure = Math.min(1, vitesse / CFG.vitesse);
     const t = j.phase;
     // la direction DESSINÉE se juge À L'ÉCRAN : on projette le regard
-    // (ou le coup) — dos quand il monte à l'écran, profil ailleurs. La
-    // vue de face n'a pas encore sa planche : elle retombe sur le profil.
+    // (ou le coup) — dos quand il monte à l'écran, face quand il
+    // descend, profil sur les côtés
     const dfx = j.attaque ? j.attaque.fx : j.fx;
     const dfy = j.attaque ? j.attaque.fy : j.fy;
     const sfx = (dfx - dfy) * ISO_C, sfy = (dfx + dfy) * ISO_S;
-    const vue = (Math.abs(sfy) * 2 > Math.abs(sfx) && sfy < 0) ? 'dos' : 'profil';
+    // le +0.001 tranche l'égalité flottante des directions pures (1,0) :
+    // sans lui, |sfy|*2 = 0.70712 dépasse |sfx| = 0.70711 d'un souffle
+    // et un regard parfaitement latéral se dessinait de face
+    const vue = Math.abs(sfy) * 2 > Math.abs(sfx) + 0.001 ? (sfy < 0 ? 'dos' : 'face') : 'profil';
     const sens = sfx < -0.05 ? -1 : 1;
     const cadre = (anim, i) => {
       const cs = CADRES_PERSO[anim];
@@ -447,7 +450,9 @@ Object.assign(Aquad.prototype, {
       // la phase avance avec la distance parcourue : pas de patinage
       f = cadre(anim, Math.floor(((t / (Math.PI*2)) % 1) * n));
     } else {
-      f = vue === 'dos' ? cadre('dos-repos', 0) : cadre('profil-marche', 0);
+      // la planche de face n'a pas de frame de repos : sa marche à
+      // l'arrêt fait très bien l'affaire
+      f = vue === 'dos' ? cadre('dos-repos', 0) : cadre(vue + '-marche', 0);
     }
 
     // le rebond du corps : deux minima par cycle, PILE sur les contacts
