@@ -168,6 +168,7 @@ class Combat extends Phaser.Scene {
     // les brins d'herbe dépassent un peu au-dessus de la ligne de sol
     const nomSol = this.def.decor === 'interieur' ? 'solMetal'
                  : this.def.decor === 'toit' ? 'solGravier'
+                 : this.def.decor === 'desert' ? 'solSable'
                  : (this.def.decor === 'villeJour'
                     || (this.def.decor === 'exterieur' && this.urbain(x + w/2) > 0.5)) ? 'solVille'
                  : 'solHerbe';
@@ -935,7 +936,8 @@ class Combat extends Phaser.Scene {
           m.assomme = 0.45;
         }
       } else {
-        m.repos = Math.max(0, m.repos - dt);
+        // un marcheur volant qui a un canon gère son repos dans majTourelle
+        if (!m.def.canon) m.repos = Math.max(0, m.repos - dt);
         const ch = m.def.charge;
         if (ch && m.repos <= 0 && !m.rentre && Math.abs(dx) < ch.portee && memeNiveau){
           m.prepare = ch.preparation; m.repos = ch.repos;
@@ -965,6 +967,10 @@ class Combat extends Phaser.Scene {
           }
         }
       }
+
+      // le drone tire aussi : la même visée que la tourelle, en volant
+      if (m.def.canon && !m.def.fixe && m.assomme <= 0 && m.prepare <= 0)
+        this.majTourelle(m, dt, dx, memeNiveau);
 
       // personne ne marche dans le vide : un marcheur au bord d'un trou
       // s'arrête net et repart dans l'autre sens — poursuite, patrouille

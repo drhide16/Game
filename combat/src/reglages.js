@@ -60,7 +60,9 @@ const ARMES = {
 // son intérêt à l'accroupissement et à l'uppercut.
 const MONSTRES = {
   baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:0.25, vol:0,  faible:'bas',  silhouette:'brute' },
-  drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:1, vol:46, faible:'haut', silhouette:'drone', vole:true },
+  // le drone vole ET tire : une visée courte puis un pruneau vers le joueur
+  drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:1, vol:46, faible:'haut', silhouette:'drone', vole:true,
+             canon:{ portee:300, visee:0.5, repos:2.8, vitesse:320 } },
   colosse: { pv:6,  taille:[52,68], vitesse: 52, patrouille:30, degats:2, vol:0,  faible:null,   silhouette:'brute', gros:true },
   // le gardien annonce son coup : il se ramasse, puis se détend d'un bloc
   gardien: { pv:6,  taille:[28,40], vitesse:120, patrouille:70, degats:1, vol:0,  faible:null,   silhouette:'gardien',
@@ -70,7 +72,7 @@ const MONSTRES = {
              fixe:true, canon:{ portee:430, visee:0.75, repos:2.1, vitesse:430 } },
   // Un boss garde la sortie de chaque étage. Ils réutilisent les
   // silhouettes existantes, en plus gros et avec leur propre couleur.
-  cogneur:  { pv:14, taille:[46,52], vitesse: 74, patrouille:34, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+  cogneur:  { pv:14, taille:[52,62], vitesse: 74, patrouille:34, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
               nom:'LE COGNEUR',              couleur:0x9b5f2f, ombre:0x6b3d1c },
   chefSecu: { pv:16, taille:[34,48], vitesse:150, patrouille:80, degats:2, vol:0, faible:null, silhouette:'gardien', boss:true,
               nom:'LE CHEF DE LA SÉCURITÉ',  couleur:0x2f8f7a, ombre:0x1c5c4d,

@@ -454,6 +454,8 @@ Object.assign(Combat.prototype, {
       else if (m.vise > 0){ anim = pref + 'Attaque'; idx = Math.floor(this.time.now / 130) % 2; }
       else { anim = pref + 'Va'; idx = Math.floor(m.phase * 1.1) % nV; }
     }
+    else if (m.tira > 0){ anim = pref + 'Attaque'; idx = nA - 1; }   // le drone tire
+    else if (m.vise > 0){ anim = pref + 'Attaque'; idx = Math.floor(this.time.now / 130) % 2; }
     else if (m.prepare > 0){ anim = pref + 'Attaque'; idx = 0; }   // il se ramasse
     else if (m.assomme > 0){
       // sonné… ou en PLEINE CHARGE (le gardien passe assommé le temps
