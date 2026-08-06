@@ -178,10 +178,11 @@ class Combat extends Phaser.Scene {
     this.add.rectangle(x + w/2, yT + 300, w, 600, 0x120d1c).setDepth(-5.1);
   }
   creerPlateforme(x, y, w){
-    const t = this.def.teinte;
-    const dedans = this.def.decor !== 'exterieur';
-    const p = this.add.rectangle(x + w/2, y + 7, w, 14, t ? t.plat : dedans ? 0x2a3152 : COUL.plat)
-      .setStrokeStyle(2, t ? t.platBord : dedans ? 0x7f8cc4 : COUL.platBord);
+    // le corps physique est invisible : l'habillage est une corniche
+    // herbeuse, le haut de la tuile de sol
+    const p = this.add.rectangle(x + w/2, y + 7, w, 14, 0, 0);
+    this.add.tileSprite(x + w/2, y + 10, w, CADRES_DECOR.plateforme.h, 'decorAtlas', 'plateforme')
+      .setDepth(-4);
     this.physics.add.existing(p, true);
     p.body.checkCollision.down = false;
     p.body.checkCollision.left = false;
@@ -245,29 +246,30 @@ class Combat extends Phaser.Scene {
       .setOrigin(0.5, 1).setScale(36 / CADRES_DECOR.caisseOK.h).setDepth(3);
     this.caisses.push({ go:c, pv:2, flash:0, img, efface:0 });
   }
-  // un bloc bonus flottant : frappé par en dessous, il lâche sa rune
+  // un bloc bonus posé au sol : un coup de poing ou de pied le frappe
+  // et sa rune jaillit — le clin d'œil à Mario reste dans le visuel
   creerBloc(x, contenu){
-    const y = SOL_Y - 128;
+    const y = SOL_Y - 24;
     const img = this.add.image(x, y, 'decorAtlas', 'blocPlein')
       .setScale(46 / CADRES_DECOR.blocPlein.h).setDepth(2.5);
     this.blocs.push({ img, x, y, contenu, plein:true, frappe:0, phase:this.alea()*6 });
   }
   majBlocs(dt){
-    const b = this.joueur.body;
     for (const bl of this.blocs){
       bl.phase += dt * 2.4;
       bl.frappe = Math.max(0, bl.frappe - dt);
-      if (!bl.plein) continue;
-      // le coup de tête de dessous, comme il se doit
-      const tete = this.joueur.y - 20;
-      if (b.velocity.y < -40 && Math.abs(this.joueur.x - bl.x) < 30
-          && tete < bl.y + 28 && tete > bl.y - 8){
+      if (!bl.plein || !this.attaque) continue;
+      const c = COUPS[this.attaque.type];
+      if (!c.portee || this.attaque.t < c.debut || this.attaque.t > c.fin) continue;
+      if (this.attaque.touches.has(bl)) continue;
+      const boite = new Phaser.Geom.Rectangle(bl.x - 23, bl.y - 23, 46, 46);
+      if (this.zonesAttaque().some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, boite))){
+        this.attaque.touches.add(bl);
         bl.plein = false; bl.frappe = 0.3;
-        b.setVelocityY(70);
         SON.jouer('caisse');
         this.cameras.main.shake(60, 0.003);
-        this.crier(bl.x, bl.y - 34, ['!'], '#ffd166', 18);
-        this.creerObjet(bl.x, bl.y - 22, bl.contenu);
+        this.crier(bl.x, bl.y - 36, ['!'], '#ffd166', 18);
+        this.creerObjet(bl.x, bl.y - 24, bl.contenu);
       }
     }
   }

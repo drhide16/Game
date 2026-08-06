@@ -14,7 +14,7 @@ const SPRITES_MONSTRES = {
   baveux:      { pref:'bav',   k:1.35 },
   grandBaveux: { pref:'bav',   k:1.35 },
   drone:       { pref:'drone', k:1.55 },
-  colosse:     { pref:'col',   k:1.25 },
+  colosse:     { pref:'col',   k:1.7 },
   gardien:     { pref:'gar',   k:1.3 },
   chefSecu:    { pref:'gar',   k:1.3 },
   scorpion:    { pref:'gar',   k:1.3 },

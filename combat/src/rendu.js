@@ -201,18 +201,19 @@ Object.assign(Combat.prototype, {
       const nx = (((i * 430 + 120 - sx * 0.08 - this.time.now * 0.004) % (L + 320)) + L + 320) % (L + 320) - 160;
       this.poserFond(i % 2 ? 'nuage2' : 'nuage1', nx, 96 + i * 34, 0.55, 0.85, null, -8.85);
     }
-    this.sapinsImg(sx*0.15, 306, 0.45, 0xbcd4bc, -8.8);
-    this.sapinsImg(sx*0.32, 340, 0.62, 0xdfeadf, -8.7);
-    this.sapinsImg(sx*0.55, 380, 0.85, null, -8.6);
+    // une variante par plan : le petit clair reste au loin, le grand
+    // sombre au premier plan — plus d'arbre fantôme devant
+    this.sapinsImg(sx*0.15, 306, 0.5, 3, 0.8, -8.8);
+    this.sapinsImg(sx*0.32, 344, 0.72, 2, 0.95, -8.7);
+    this.sapinsImg(sx*0.55, 382, 0.95, 1, 1, -8.6);
   },
-  sapinsImg(off, base, e, tint, depth){
+  sapinsImg(off, base, e, variante, alpha, depth){
     const pas = 150;
     const debut = Math.floor(off/pas) - 1;
     for (let i = debut; i < debut + Math.ceil(L/pas) + 3; i++){
       const x = i*pas - off + (i % 3) * 16;
-      const v = 1 + (Math.abs(i * 7) % 3);   // sapin1..3, figé par case
       const hh = e * (0.8 + Math.abs(Math.sin(i*12.99)) * 0.4);
-      this.poserFond('sapin' + v, x, base, hh, 1, tint, depth);
+      this.poserFond('sapin' + variante, x, base, hh, alpha, null, depth);
     }
   },
   dessinerDesert(sx){
@@ -382,10 +383,9 @@ Object.assign(Combat.prototype, {
       g.fillStyle(0x000000, 0.25); g.fillEllipse(k.go.x, k.go.y + 16, 30, 6);
       if (k.flash > 0) k.img.setTintFill(0xffffff); else k.img.clearTint();
     }
-    // et les blocs bonus : flottent, se compriment au coup, s'éteignent
+    // et les blocs bonus : posés au sol, comprimés au coup, éteints après
     for (const bl of this.blocs){
-      const flotte = bl.plein ? Math.sin(bl.phase) * 3 : 0;
-      bl.img.setPosition(bl.x, bl.y + flotte);
+      bl.img.setPosition(bl.x, bl.y);
       if (bl.frappe > 0){
         bl.img.setTexture('decorAtlas', 'blocFrappe');
         bl.img.setScale(46 / CADRES_DECOR.blocFrappe.h);
