@@ -69,6 +69,12 @@ class Combat extends Phaser.Scene {
     for (let i = 0; i < 10; i++)
       this.imgTirs.push(this.add.image(0, 0, 'persoAtlas', 'boule0')
         .setDepth(7).setVisible(false).setScale(0.7));
+    // les dépouilles des monstres à sprites : un petit pool qui s'efface
+    this.cadavres = [];
+    this.imgCadavres = [];
+    for (let i = 0; i < 6; i++)
+      this.imgCadavres.push(this.add.image(0, 0, 'persoAtlas', 'bavMort0')
+        .setDepth(3.6).setVisible(false));
     this.gEclats   = this.add.graphics().setDepth(6);
     this.gTirs     = this.add.graphics().setDepth(7);
     // huit textes recycles pour les onomatopees : creer un objet texte a
@@ -197,6 +203,13 @@ class Combat extends Phaser.Scene {
       dir:-1, minX, maxX, baseY:y, phase:this.alea()*6,
       prepare:0, repos:0, vise:0,
     };
+    // les monstres qui ont leur planche : une image plutôt qu'un dessin
+    const sm = SPRITES_MONSTRES[type];
+    if (sm){
+      m.sprPref = sm.pref;
+      m.sprE = (d.taille[1] * sm.k) / CADRES_PERSO[sm.pref + 'Va'][0].h;
+      m.spr = this.add.image(0, 0, 'persoAtlas', sm.pref + 'Va0').setDepth(4).setVisible(false);
+    }
     this.monstres.push(m);
     return m;
   }
@@ -368,6 +381,12 @@ class Combat extends Phaser.Scene {
       // le boss offre aussi une vie : elle part de l'autre côté pour que
       // les deux cadeaux ne se confondent pas
       if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
+      if (m.spr){
+        // la dépouille reste un instant : le K.O. se joue, puis s'efface
+        this.cadavres.push({ x:m.go.x, y:m.go.y + m.def.taille[1]/2 + 2,
+                             e:m.sprE, sens:dir, pref:m.sprPref, t:0 });
+        m.spr.destroy(); m.spr = null;
+      }
       m.go.destroy();
       if (m.def.boss){
         this.bossVivant = false;
@@ -931,6 +950,8 @@ class Combat extends Phaser.Scene {
     b.vy = -46;
   }
   majEclats(dt){
+    for (const cd of this.cadavres) cd.t += dt;
+    this.cadavres = this.cadavres.filter(cd => cd.t < 1.5);
     for (const e of this.eclats){ e.vie -= dt; e.vy += 900*dt; e.x += e.vx*dt; e.y += e.vy*dt; }
     this.eclats = this.eclats.filter(e => e.vie > 0);
     for (const b of this.bulles){
