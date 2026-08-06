@@ -24,21 +24,7 @@ Object.assign(Aquad.prototype, {
     this.dessinerHud();
   },
 
-  // ── le sol : l'eau, la plage, l'herbe ───────────────────────
-  // le contour de l'île à une marge donnée, ondulé par deux sinus figés
-  // (fonction de la position monde, jamais du temps : la côte ne grouille
-  // pas) — un polygone organique à la place d'un rectangle de carte
-  contourIle(marge){
-    const iX = this.ileX - marge, iY = this.ileY - marge;
-    const iL = this.ileL + marge*2, iH = this.ileH + marge*2;
-    const ond = k => Math.sin(k * 0.017) * 7 + Math.sin(k * 0.031) * 4;
-    const pas = 56, pts = [];
-    for (let x = iX; x < iX + iL; x += pas) pts.push({ x, y: iY + ond(x) });
-    for (let y = iY; y < iY + iH; y += pas) pts.push({ x: iX + iL + ond(y), y });
-    for (let x = iX + iL; x > iX; x -= pas) pts.push({ x, y: iY + iH + ond(x + 999) });
-    for (let y = iY + iH; y > iY; y -= pas) pts.push({ x: iX + ond(y + 999), y });
-    return pts;
-  },
+  // ── le sol : l'eau et le chemin de disques de terre ─────────
   dessinerSol(){
     const g = this.gSol; g.clear();
     const cam = this.cameras.main;
@@ -52,137 +38,105 @@ Object.assign(Aquad.prototype, {
     const wx0 = Math.min(c1.x, c2.x, c3.x, c4.x), wx1 = Math.max(c1.x, c2.x, c3.x, c4.x);
     const wy0 = Math.min(c1.y, c2.y, c3.y, c4.y), wy1 = Math.max(c1.y, c2.y, c3.y, c4.y);
     const visible = (x, y) => x > wx0 && x < wx1 && y > wy0 && y < wy1;
+    const noeudVisible = nd =>
+      nd.x + nd.r + 140 > wx0 && nd.x - nd.r - 140 < wx1 &&
+      nd.y + nd.r + 140 > wy0 && nd.y - nd.r - 140 < wy1;
+    const vus = this.noeuds.filter(noeudVisible);
 
-    // l'eau profonde remplit l'écran (espace écran, hors projection)
+    // l'eau profonde remplit l'écran, puis tout se dessine en projection
     g.fillStyle(COUL.eauProfonde, 1); g.fillRect(vx, vy, vl, vh);
-    const iX = this.ileX, iY = this.ileY, iL = this.ileL, iH = this.ileH;
-
-    // tout le reste du sol se dessine EN COORDONNÉES MONDE à travers la
-    // projection : écraser de moitié puis tourner de 45° EST le losange
     g.save();
     g.scaleCanvas(1, 0.5);
     g.rotateCanvas(Math.PI / 4);
-    g.fillStyle(COUL.eau, 1); g.fillRect(iX - 90, iY - 90, iL + 180, iH + 180);
 
-    // vaguelettes d'écume qui respirent le long de la côte (des TRAITS :
-    // pas de triangulation, donc pas de polygone géant qui rate)
+    // le halo d'eau claire autour de chaque disque de terre
+    for (const nd of vus){
+      g.fillStyle(COUL.eau, 1); g.fillCircle(nd.x, nd.y, nd.r + 90);
+    }
+    // TOUTES les écumes d'abord : leurs traits qui traversent la terre
+    // seront recouverts par les remplissages des disques voisins
     const resp = Math.sin(this.time.now / 600) * 4;
-    g.lineStyle(4, COUL.eauClaire, 0.7);
-    g.strokePoints(this.contourIle(38 + resp), true);
-    g.lineStyle(3, COUL.ecume, 0.5);
-    g.strokePoints(this.contourIle(26 + resp * 0.5), true);
-    // un troisième trait, très pâle et plus large : la côte est humide
-    g.lineStyle(2, COUL.ecume, 0.22);
-    g.strokePoints(this.contourIle(52 + resp * 1.5), true);
-
-    // des reflets qui dérivent lentement sur l'eau : l'aplat se met à vivre
+    for (const nd of vus){
+      g.lineStyle(2, COUL.ecume, 0.22); g.strokeCircle(nd.x, nd.y, nd.r + 52 + resp * 1.5);
+      g.lineStyle(4, COUL.eauClaire, 0.7); g.strokeCircle(nd.x, nd.y, nd.r + 38 + resp);
+      g.lineStyle(3, COUL.ecume, 0.5); g.strokeCircle(nd.x, nd.y, nd.r + 26 + resp * 0.5);
+    }
+    // des reflets qui dérivent lentement autour des nœuds
     const tEau = this.time.now / 4000;
     g.lineStyle(2.5, 0xffffff, 0.22);
-    for (let i = 0; i < 14; i++){
-      const a = Math.abs(Math.sin(i * 12.3));
-      const per = (a * 7 + tEau * (0.05 + a * 0.05)) % 1;
-      const m = 30 + a * 55;
-      let gx, gy;
-      if (i % 4 === 0){ gx = iX + per * iL; gy = iY - m; }
-      else if (i % 4 === 1){ gx = iX + iL + m; gy = iY + per * iH; }
-      else if (i % 4 === 2){ gx = iX + per * iL; gy = iY + iH + m; }
-      else { gx = iX - m; gy = iY + per * iH; }
-      if (!visible(gx, gy)) continue;
-      g.beginPath(); g.moveTo(gx - 6, gy); g.lineTo(gx + 6, gy); g.strokePath();
-    }
-
-    // la côte en FESTONS : des rangées d'ellipses qui mordent le long des
-    // bords — organique, cullable, et fiable là où le remplissage WebGL
-    // d'un polygone de 120 sommets ne l'est pas
-    const feston = (marge, couleur, lx, ly) => {
-      g.fillStyle(couleur, 1);
-      const x0 = iX - marge, y0 = iY - marge;
-      const x1 = iX + iL + marge, y1 = iY + iH + marge;
-      const ond = k => Math.sin(k * 0.017) * 6 + Math.sin(k * 0.031) * 3;
-      for (let x = x0; x <= x1; x += 48){
-        if (visible(x, y0)) g.fillEllipse(x, y0 + ond(x), lx, ly);
-        if (visible(x, y1)) g.fillEllipse(x, y1 + ond(x + 999), lx, ly);
+    for (const nd of vus){
+      for (let k = 0; k < 4; k++){
+        const a0 = Math.abs(Math.sin(nd.x * 0.01 + k * 12.3));
+        const a = a0 * Math.PI * 2 + tEau * (0.3 + a0 * 0.4);
+        const dist = nd.r + 70 + a0 * 60;
+        const gx = nd.x + Math.cos(a) * dist, gy = nd.y + Math.sin(a) * dist;
+        if (this.surTerre(gx, gy, -30) || !visible(gx, gy)) continue;
+        g.beginPath(); g.moveTo(gx - 6, gy); g.lineTo(gx + 6, gy); g.strokePath();
       }
-      for (let y = y0; y <= y1; y += 48){
-        if (visible(x0, y)) g.fillEllipse(x0 + ond(y), y, ly, lx);
-        if (visible(x1, y)) g.fillEllipse(x1 + ond(y + 777), y, ly, lx);
-      }
-    };
-    // sable mouillé qui lèche l'eau, sable par-dessus, cœur de plage en aplat
-    feston(18, COUL.sableMouille, 58, 30);
-    feston(10, t.sable || COUL.sable, 60, 34);
-    g.fillStyle(t.sable || COUL.sable, 1);
-    g.fillRect(iX - 10, iY - 10, iL + 20, iH + 20);
-    // l'herbe mord sur le sable, son cœur en aplat
-    feston(-46, t.herbe, 56, 30);
-    g.fillStyle(t.herbe, 1);
-    g.fillRect(iX + 46, iY + 46, iL - 92, iH - 92);
+    }
+    // puis les remplissages, couche par couche sur TOUS les disques :
+    // sable mouillé, sable, herbe — les cercles fusionnent en serpentin
+    for (const nd of vus){ g.fillStyle(COUL.sableMouille, 1); g.fillCircle(nd.x, nd.y, nd.r + 18); }
+    for (const nd of vus){ g.fillStyle(t.sable || COUL.sable, 1); g.fillCircle(nd.x, nd.y, nd.r + 8); }
+    for (const nd of vus){ g.fillStyle(t.herbe, 1); g.fillCircle(nd.x, nd.y, Math.max(30, nd.r - 28)); }
 
-    // le sol vivant, à plusieurs échelles, figé par des hachages.
-    // Les taches sont des AMAS d'ellipses décalées : contours irréguliers,
-    // plus jamais l'ellipse parfaite qui sent l'ordinateur
-    g.fillStyle(t.herbeClaire || COUL.herbeClaire, 1);
-    for (let i = 0; i < 50; i++){
-      const hx = iX + 70 + (Math.abs(Math.sin(i * 47.13)) * (iL - 140));
-      const hy = iY + 70 + (Math.abs(Math.sin(i * 23.71)) * (iH - 140));
-      if (!visible(hx, hy)) continue;
-      const j1 = Math.sin(i * 5.7) * 10, j2 = Math.sin(i * 9.1) * 6;
-      g.fillEllipse(hx, hy, 34, 15);
-      g.fillEllipse(hx + j1, hy + j2 * 0.5, 24, 11);
-      g.fillEllipse(hx - j2, hy - j1 * 0.4, 20, 9);
-    }
-    // les touffes sombres, en amas aussi
-    g.fillStyle(t.herbeSombre, 1);
-    for (let i = 0; i < 60; i++){
-      const hx = iX + 60 + (Math.abs(Math.sin(i * 12.99)) * (iL - 120));
-      const hy = iY + 60 + (Math.abs(Math.sin(i * 78.23)) * (iH - 120));
-      if (!visible(hx, hy)) continue;
-      const j1 = Math.sin(i * 7.3) * 7;
-      g.fillEllipse(hx, hy, 22, 10);
-      g.fillEllipse(hx + j1, hy + 3, 15, 7);
-    }
-    // des brins d'herbe entre les taches
-    g.lineStyle(2, COUL.brin, 0.9);
-    for (let i = 0; i < 34; i++){
-      const hx = iX + 70 + (Math.abs(Math.sin(i * 33.7)) * (iL - 140));
-      const hy = iY + 70 + (Math.abs(Math.sin(i * 71.9)) * (iH - 140));
-      if (!visible(hx, hy)) continue;
-      const dxb = Math.sin(i * 3.3) * 2.5;
-      g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + dxb, hy - 6); g.strokePath();
-      g.beginPath(); g.moveTo(hx + 3, hy + 1); g.lineTo(hx + 3 - dxb, hy - 5); g.strokePath();
-    }
-    // quelques fleurs
-    for (let i = 0; i < 24; i++){
-      const hx = iX + 80 + (Math.abs(Math.sin(i * 91.7)) * (iL - 160));
-      const hy = iY + 80 + (Math.abs(Math.sin(i * 37.3)) * (iH - 160));
-      if (!visible(hx, hy)) continue;
-      g.fillStyle(i % 3 ? COUL.fleur : COUL.fleur2, 1);
-      g.fillCircle(hx, hy, 2.2); g.fillCircle(hx + 4, hy + 2, 1.6);
-    }
-    // coquillages et galets sur l'anneau de plage
-    for (let i = 0; i < 22; i++){
-      const hx = iX + 8 + (Math.abs(Math.sin(i * 63.29)) * (iL - 16));
-      const hy = iY + 8 + (Math.abs(Math.sin(i * 17.89)) * (iH - 16));
-      const bord = Math.min(hx - iX, iX + iL - hx, hy - iY, iY + iH - hy);
-      if (bord > 40 || !visible(hx, hy)) continue;
-      if (i % 2){
-        g.fillStyle(COUL.coquillage, 1);
-        g.fillEllipse(hx, hy, 5, 4);
-        g.fillStyle(COUL.sableOmbre, 1); g.fillCircle(hx, hy + 1, 1);
-      } else {
-        g.fillStyle(COUL.galet, 1); g.fillEllipse(hx, hy, 6, 4);
+    // le sol vivant : détails hachés par nœud, plus fournis en prairie
+    for (let i = 0; i < this.noeuds.length; i++){
+      const nd = this.noeuds[i];
+      if (!noeudVisible(nd)) continue;
+      const nDet = Math.round(nd.r / 14);
+      for (let k = 0; k < nDet; k++){
+        const h1 = Math.abs(Math.sin(i * 37.7 + k * 12.99));
+        const h2 = Math.abs(Math.sin(i * 53.1 + k * 78.23));
+        const a = h1 * Math.PI * 2;
+        const dist = h2 * Math.max(10, nd.r - 60);
+        const hx = nd.x + Math.cos(a) * dist, hy = nd.y + Math.sin(a) * dist;
+        if (!visible(hx, hy)) continue;
+        const genre = (i * 7 + k) % 5;
+        if (genre === 0){
+          g.fillStyle(t.herbeClaire || COUL.herbeClaire, 1);
+          g.fillEllipse(hx, hy, 32, 14);
+          g.fillEllipse(hx + Math.sin(k * 5.7) * 9, hy + 4, 22, 10);
+        } else if (genre === 1){
+          g.fillStyle(t.herbeSombre, 1);
+          g.fillEllipse(hx, hy, 22, 10);
+          g.fillEllipse(hx + Math.sin(k * 7.3) * 7, hy + 3, 15, 7);
+        } else if (genre === 2){
+          g.lineStyle(2, COUL.brin, 0.9);
+          const dxb = Math.sin(k * 3.3) * 2.5;
+          g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + dxb, hy - 6); g.strokePath();
+          g.beginPath(); g.moveTo(hx + 3, hy + 1); g.lineTo(hx + 3 - dxb, hy - 5); g.strokePath();
+        } else if (genre === 3){
+          g.fillStyle(k % 3 ? COUL.fleur : COUL.fleur2, 1);
+          g.fillCircle(hx, hy, 2.2); g.fillCircle(hx + 4, hy + 2, 1.6);
+        }
+        // genre 4 : rien — le vide aussi fait respirer le sol
+      }
+      // coquillages et galets sur l'anneau de plage du disque
+      for (let k = 0; k < 5; k++){
+        const h1 = Math.abs(Math.sin(i * 91.3 + k * 17.89));
+        const a = h1 * Math.PI * 2;
+        const dist = nd.r - 18 + Math.sin(i + k * 2.7) * 8;
+        const hx = nd.x + Math.cos(a) * dist, hy = nd.y + Math.sin(a) * dist;
+        if (!visible(hx, hy)) continue;
+        if (k % 2){
+          g.fillStyle(COUL.coquillage, 1); g.fillEllipse(hx, hy, 5, 4);
+          g.fillStyle(COUL.sableOmbre, 1); g.fillCircle(hx, hy + 1, 1);
+        } else {
+          g.fillStyle(COUL.galet, 1); g.fillEllipse(hx, hy, 6, 4);
+        }
       }
     }
     g.restore();
   },
 
-  // ── le ponton de sortie, à l'est ────────────────────────────
+  // ── le ponton de sortie, au dernier nœud du chemin ──────────
   dessinerSortie(){
     const g = this.gSortie; g.clear();
     g.save();
     g.scaleCanvas(1, 0.5);
     g.rotateCanvas(Math.PI / 4);
-    const x0 = this.ileX + this.ileL - 6, y = this.pontonY;
+    const x0 = this.arrivee.x + this.arrivee.r - 12, y = this.arrivee.y;
     const bloquee = this.bossVivant;
     const pulse = bloquee ? 0 : 0.55 + 0.45 * Math.sin(this.time.now / 260);
     // planches au-dessus de l'eau
