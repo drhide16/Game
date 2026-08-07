@@ -260,7 +260,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '30';
+const VERSION = '31';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -2552,8 +2552,13 @@ Object.assign(Combat.prototype, {
     } else if (!auSol){
       f = cadre('saut', b.velocity.y < -60 ? 1 : b.velocity.y > 60 ? 3 : 2);
     } else if (this.accroupi){
-      // la vraie garde basse ; en rampant, les deux poses s'alternent
-      f = cadre('accroupi', marche ? Math.floor(this.phase * 2) % 2 : 0);
+      // la vraie garde basse ; en rampant : la planche « rampe » dès
+      // qu'on l'aura, sinon les deux poses alternent et le corps se
+      // balance (voir plus bas) pour ne pas glisser bêtement
+      if (marche && CADRES_PERSO.rampe){
+        const n = CADRES_PERSO.rampe.length;
+        f = cadre('rampe', Math.floor(((this.phase / (Math.PI*2)) % 1) * n));
+      } else f = cadre('accroupi', marche ? Math.floor(this.phase * 2) % 2 : 0);
     } else if (marche){
       const anim = allure > 0.72 ? 'course' : 'marche';
       const n = CADRES_PERSO[anim].length;
@@ -2566,7 +2571,13 @@ Object.assign(Combat.prototype, {
     spr.setTexture('persoAtlas', f.nom);
     spr.setFlipX(flip);
     spr.setOrigin(flip ? 1 - f.c.ox : f.c.ox, f.c.oy);
-    spr.setPosition(this.joueur.x, this.joueur.y + PIEDS + 2);
+    // en rampant sans planche dédiée : petit balancement vertical et
+    // inclinaison vers l'avant, pour une vraie allure de progression
+    const rampeSansPlanche = auSol && this.accroupi && marche
+      && !this.attaque && !this.charge && !CADRES_PERSO.rampe;
+    spr.setPosition(this.joueur.x, this.joueur.y + PIEDS + 2
+      - (rampeSansPlanche ? Math.abs(Math.sin(this.phase * 2)) * 2.5 : 0));
+    spr.setRotation(rampeSansPlanche ? this.sens * (0.09 + Math.sin(this.phase * 4) * 0.05) : 0);
     // seuls les tirs et le jet n'ont pas de pose accroupie : pour eux on
     // tasse encore le sprite — poing et pied ont leurs vraies frames
     const cA = this.attaque && COUPS[this.attaque.type];
