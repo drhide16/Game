@@ -20,7 +20,7 @@ const SPRITES_MONSTRES = {
   patron:      { pref:'pat',   k:1.5 },
   gardien:     { pref:'gar',   k:1.3 },
   chefSecu:    { pref:'chef',  k:1.4 },
-  scorpion:    { pref:'sco',   k:1.4 },
+  scorpion:    { pref:'sco',   k:1.5 },
   tourelle:    { pref:'tour',  k:1.4 },
   canonnier:   { pref:'can',   k:1.55 },
   sentinelle:  { pref:'sent',  k:1.55 },

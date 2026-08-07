@@ -84,7 +84,7 @@ const MONSTRES = {
               nom:'LE BROYEUR',              couleur:0xb03a3a, ombre:0x762222 },
   grandBaveux:{ pv:16, taille:[44,50], vitesse: 70, patrouille:36, degats:1, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
               nom:'LE GRAND BAVEUX',         couleur:0x8f5fae, ombre:0x5d3a78 },
-  scorpion: { pv:18, taille:[34,44], vitesse:135, patrouille:70, degats:1, vol:0, faible:null, silhouette:'gardien', boss:true,
+  scorpion: { pv:18, taille:[52,82], vitesse:135, patrouille:70, degats:1, vol:0, faible:null, silhouette:'gardien', boss:true,
               nom:'LE SCORPION DES SABLES',  couleur:0xc2913a, ombre:0x8a6220,
               charge:{ portee:250, preparation:0.40, elan:480, repos:1.6 } },
   sentinelle:{ pv:18, taille:[36,32], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
