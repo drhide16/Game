@@ -202,8 +202,8 @@
     .choix-diff button{padding:7px 10px}
     .record{margin-top:5px}
     .demarrer{margin-top:12px;padding:11px 20px}
-    .histoire-texte{font-size:12px;line-height:1.6}
-    .histoire-texte p{margin:0 0 8px}
+    .histoire-texte{font-size:15px;line-height:1.6}
+    .histoire-texte p{margin:0 0 12px}
   }
 
   /* ── le récit : l'histoire s'écrit lettre à lettre ─────────── */
@@ -216,11 +216,11 @@
   }
   .histoire[hidden]{display:none}
   .histoire-texte{
-    max-width:620px;width:100%;
-    font:14px/1.9 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    max-width:680px;width:100%;
+    font:clamp(17px,2.8vw,22px)/1.8 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     color:#cbd5f0;text-align:center;text-shadow:0 0 14px rgba(203,213,240,.15);
   }
-  .histoire-texte p{margin:0 0 12px;min-height:1em}
+  .histoire-texte p{margin:0 0 18px;min-height:1em}
   .histoire-suite{
     margin-top:16px;
     font-family:'Arcade',ui-monospace,monospace;font-size:10px;letter-spacing:.12em;
@@ -891,20 +891,18 @@ const HISTOIRE = {
   ],
 };
 
-// Affiche un récit lettre à lettre. apres() n'est appelé qu'après un
-// appui une fois le texte complet — jamais tout seul.
+// Affiche un récit lettre à lettre, en PAGES de deux phrases — de
+// grosses lettres, plusieurs écrans. Un appui : toute la page. Un
+// second : la page suivante, ou la suite si c'était la dernière.
+// apres() n'est jamais appelé sans un appui du joueur.
 function montrerHistoire(lignes, apres){
   const el = document.getElementById('histoire');
   const zone = document.getElementById('histoireTexte');
   const suite = document.getElementById('histoireSuite');
-  zone.innerHTML = '';
-  const paras = lignes.map(texte => {
-    const p = document.createElement('p');
-    zone.appendChild(p);
-    return { p, texte, n:0 };
-  });
-  let i = 0, fini = false, pause = 0;
-  suite.style.visibility = 'hidden';
+  const PAR_ECRAN = 2;
+  const pages = [];
+  for (let n = 0; n < lignes.length; n += PAR_ECRAN) pages.push(lignes.slice(n, n + PAR_ECRAN));
+  let page = -1, paras = [], i = 0, pause = 0, fini = false, minuterie = null;
   el.hidden = false;
 
   const toutAfficher = () => {
@@ -915,7 +913,7 @@ function montrerHistoire(lignes, apres){
   };
   // 70 ms par lettre : le rythme d'un enfant qui lit (CE1-CE2), avec une
   // respiration au bout de chaque phrase — un appui accélère de toute façon
-  const minuterie = setInterval(() => {
+  const tic = () => {
     if (pause > 0){ pause--; return; }
     const c = paras[i];
     if (!c){ toutAfficher(); return; }
@@ -923,12 +921,28 @@ function montrerHistoire(lignes, apres){
     // le petit tac-tac de machine à écrire, discret
     if (c.n % 3 === 0 && SON.ctx && SON.actif) SON.note('square', 1400, 1400, 0.012, 0.018);
     if (c.n >= c.texte.length){ i++; pause = 12; }
-  }, 70);
+  };
+  const lancerPage = () => {
+    page++;
+    zone.innerHTML = '';
+    suite.style.visibility = 'hidden';
+    suite.textContent = page < pages.length - 1 ? '▼ APPUIE POUR LA SUITE' : '▼ APPUIE POUR CONTINUER';
+    fini = false; i = 0; pause = 0;
+    paras = pages[page].map(texte => {
+      const p = document.createElement('p');
+      zone.appendChild(p);
+      return { p, texte, n:0 };
+    });
+    clearInterval(minuterie);
+    minuterie = setInterval(tic, 70);
+  };
 
   const avancer = (e) => {
     if (e) e.preventDefault();
-    if (!fini){ toutAfficher(); return; }   // 1ᵉʳ appui : tout le texte
-    el.hidden = true;                        // 2ᵉ appui : on continue
+    if (!fini){ toutAfficher(); return; }          // 1ᵉʳ appui : toute la page
+    if (page < pages.length - 1){ lancerPage(); return; }   // page suivante
+    el.hidden = true;                               // dernière page : on continue
+    clearInterval(minuterie);
     el.removeEventListener('pointerdown', avancer);
     removeEventListener('keydown', surTouche);
     montrerHistoire.passer = null;
@@ -944,10 +958,12 @@ function montrerHistoire(lignes, apres){
   el.addEventListener('pointerdown', avancer);
   addEventListener('keydown', surTouche);
   montrerHistoire.passer = avancer;   // pour les tests : sauter le récit
+  lancerPage();
 }
-// saute le récit en cours (deux appuis simulés) — utilisé par les tests
+// saute tout le récit en cours (appuis simulés) — utilisé par les tests
 function passerHistoire(){
-  if (montrerHistoire.passer){ montrerHistoire.passer(); if (montrerHistoire.passer) montrerHistoire.passer(); }
+  let garde = 40;
+  while (montrerHistoire.passer && garde--) montrerHistoire.passer();
 }
 
 // ═══════════════ src/moteur.js ═══════════════
