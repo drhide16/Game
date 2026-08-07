@@ -202,7 +202,31 @@
     .choix-diff button{padding:7px 10px}
     .record{margin-top:5px}
     .demarrer{margin-top:12px;padding:11px 20px}
+    .histoire-texte{font-size:12px;line-height:1.6}
+    .histoire-texte p{margin:0 0 8px}
   }
+
+  /* ── le récit : l'histoire s'écrit lettre à lettre ─────────── */
+  .histoire{
+    position:fixed;inset:0;z-index:30;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:calc(18px + env(safe-area-inset-top)) 28px calc(18px + env(safe-area-inset-bottom));
+    background:radial-gradient(120% 85% at 50% 32%, #1d2647 0%, #0d1120 58%, #070911 100%);
+    cursor:pointer;
+  }
+  .histoire[hidden]{display:none}
+  .histoire-texte{
+    max-width:620px;width:100%;
+    font:14px/1.9 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    color:#cbd5f0;text-align:center;text-shadow:0 0 14px rgba(203,213,240,.15);
+  }
+  .histoire-texte p{margin:0 0 12px;min-height:1em}
+  .histoire-suite{
+    margin-top:16px;
+    font-family:'Arcade',ui-monospace,monospace;font-size:10px;letter-spacing:.12em;
+    color:#4dd6c1;animation:cligne 1.2s steps(2) infinite;
+  }
+  @keyframes cligne{50%{opacity:.15}}
 </style>
 </head>
 <body>
@@ -225,6 +249,11 @@
 </div>
 
 <button class="son" id="son" title="Couper le son">♪</button>
+
+<div class="histoire" id="histoire" hidden>
+  <div class="histoire-texte" id="histoireTexte"></div>
+  <div class="histoire-suite" id="histoireSuite">▼ APPUIE POUR CONTINUER</div>
+</div>
 
 <div class="manette">
   <div class="socle" id="socle">
@@ -260,7 +289,7 @@ if (typeof Phaser === 'undefined'){
 // plus récente, on se recharge sur une URL neuve — un simple reload()
 // pourrait resservir la copie en cache, une URL jamais vue non.
 // ─────────────────────────────────────────────────────────────
-const VERSION = '38';
+const VERSION = '39';
 
 (function verifierVersion(){
   if (location.protocol === 'file:' || typeof fetch !== 'function') return;
@@ -804,6 +833,123 @@ addEventListener('keyup', e => {
   }
 });
 
+// ═══════════════ src/histoire.js ═══════════════
+// ─────────────────────────────────────────────────────────────
+// L'HISTOIRE
+// Le récit s'écrit lettre à lettre, comme dans les vieux jeux de rôle.
+// Un appui : tout le texte s'affiche d'un coup. Un second appui : on
+// continue. On n'entre JAMAIS dans un niveau sans un appui du joueur.
+// L'intro se joue avant la forêt, un interlude ouvre chaque étage
+// suivant (une seule fois par partie), et la conclusion suit le Patron.
+// ─────────────────────────────────────────────────────────────
+const HISTOIRE = {
+  intro: [
+    'Voici MARTIN.',
+    'Martin n\'a peur de rien. Ni du noir, ni des orages, ni des grosses bêtes.',
+    'Il habite une petite maison, tout près de la grande forêt.',
+    'Un matin, des monstres baveux sortent d\'entre les arbres et attaquent le village !',
+    'Tout le monde s\'enfuit en courant... sauf Martin.',
+    '« D\'où viennent ces monstres ? » se demande-t-il.',
+    '« Il n\'y a qu\'un seul moyen de le savoir : aller voir plus loin. »',
+    'Et Martin entre dans la forêt.',
+  ],
+  // un texte par étage — l'index 0 (la forêt) est couvert par l'intro
+  niveaux: [
+    null,
+    [ 'Le Grand Baveux est vaincu ! Derrière la forêt, Martin découvre un désert brûlant.',
+      'Sur le sable, d\'étranges traces de pas... et des morceaux de métal qui brillent au soleil.',
+      '« Des machines ? En plein désert ? » Martin fronce les sourcils. « Continuons. »' ],
+    [ 'Le Scorpion des Sables mord la poussière. Au loin, Martin aperçoit une ville.',
+      'Ici aussi les monstres sont passés : les rues sont vides, et des drones volent entre les immeubles.',
+      'Sur une caisse cassée, Martin remarque un logo : une TOUR NOIRE.',
+      '« Voilà ma piste ! »' ],
+    [ 'La Sentinelle est en morceaux, et la nuit tombe sur la ville.',
+      'Tout au bout de la rue se dresse une tour immense... la même que sur le logo !',
+      'C\'est de là que viennent les monstres, Martin en est sûr.',
+      'Il serre les poings : « J\'arrive. »' ],
+    [ 'Le Cogneur gardait l\'entrée : mal joué pour lui.',
+      'Martin pousse la porte de la tour. Le hall est plein de chevaliers en armure.',
+      'Quelqu\'un paie tous ces gardes... quelqu\'un qui cache un gros secret, tout là-haut.' ],
+    [ 'Le Chef de la Sécurité est au tapis. Au 14ᵉ étage, des papiers traînent partout.',
+      'Martin lit : « EXPÉRIENCE N°8 : transformer les animaux en monstres. Signé : LE PATRON. »',
+      'Alors c\'est lui ! Un savant fou qui FABRIQUE les monstres dans sa tour !' ],
+    [ 'Au 37ᵉ étage, ça gronde et ça fume : voici les machines qui fabriquent les monstres !',
+      'Si Martin les casse toutes, plus un seul monstre ne sortira de la tour.',
+      'Et tout en haut, quelqu\'un l\'attend...' ],
+    [ 'Les machines sont détruites ! Il ne reste qu\'un endroit : le toit.',
+      'Le Patron est là, en costume-cravate, avec son sourire de méchant.',
+      '« Personne n\'arrêtera mes expériences ! » crie-t-il.',
+      '« Moi, si », répond Martin.' ],
+  ],
+  fin: [
+    'Le Patron est tombé — et avec lui, toutes ses machines.',
+    'Peu à peu, les monstres disparaissent. La ville se rallume, le désert se calme, et la forêt redevient tranquille.',
+    'Martin rentre chez lui. Le village entier l\'accueille en héros.',
+    'Car être courageux, ce n\'est pas ne jamais avoir peur...',
+    'C\'est avancer quand même, pour protéger ceux qu\'on aime.',
+    'BRAVO, MARTIN !',
+  ],
+};
+
+// Affiche un récit lettre à lettre. apres() n'est appelé qu'après un
+// appui une fois le texte complet — jamais tout seul.
+function montrerHistoire(lignes, apres){
+  const el = document.getElementById('histoire');
+  const zone = document.getElementById('histoireTexte');
+  const suite = document.getElementById('histoireSuite');
+  zone.innerHTML = '';
+  const paras = lignes.map(texte => {
+    const p = document.createElement('p');
+    zone.appendChild(p);
+    return { p, texte, n:0 };
+  });
+  let i = 0, fini = false, pause = 0;
+  suite.style.visibility = 'hidden';
+  el.hidden = false;
+
+  const toutAfficher = () => {
+    for (const c of paras){ c.p.textContent = c.texte; c.n = c.texte.length; }
+    fini = true;
+    suite.style.visibility = 'visible';
+    clearInterval(minuterie);
+  };
+  // 70 ms par lettre : le rythme d'un enfant qui lit (CE1-CE2), avec une
+  // respiration au bout de chaque phrase — un appui accélère de toute façon
+  const minuterie = setInterval(() => {
+    if (pause > 0){ pause--; return; }
+    const c = paras[i];
+    if (!c){ toutAfficher(); return; }
+    c.p.textContent = c.texte.slice(0, ++c.n);
+    // le petit tac-tac de machine à écrire, discret
+    if (c.n % 3 === 0 && SON.ctx && SON.actif) SON.note('square', 1400, 1400, 0.012, 0.018);
+    if (c.n >= c.texte.length){ i++; pause = 12; }
+  }, 70);
+
+  const avancer = (e) => {
+    if (e) e.preventDefault();
+    if (!fini){ toutAfficher(); return; }   // 1ᵉʳ appui : tout le texte
+    el.hidden = true;                        // 2ᵉ appui : on continue
+    el.removeEventListener('pointerdown', avancer);
+    removeEventListener('keydown', surTouche);
+    montrerHistoire.passer = null;
+    // la touche qui a fermé le récit ne doit pas faire sauter le héros
+    ENTREE.saut = false; ENTREE.sautPresse = false; ENTREE.validePresse = false;
+    if (apres) apres();
+  };
+  const surTouche = (e) => {
+    if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp'){
+      e.preventDefault(); avancer();
+    }
+  };
+  el.addEventListener('pointerdown', avancer);
+  addEventListener('keydown', surTouche);
+  montrerHistoire.passer = avancer;   // pour les tests : sauter le récit
+}
+// saute le récit en cours (deux appuis simulés) — utilisé par les tests
+function passerHistoire(){
+  if (montrerHistoire.passer){ montrerHistoire.passer(); if (montrerHistoire.passer) montrerHistoire.passer(); }
+}
+
 // ═══════════════ src/moteur.js ═══════════════
 // ─────────────────────────────────────────────────────────────
 // SCÈNE
@@ -944,6 +1090,17 @@ class Combat extends Phaser.Scene {
       .setStroke('#0d1120', 5).setOrigin(0.5).setScrollFactor(0).setDepth(11);
 
     this.message(this.def.nom + '  —  ' + this.def.sous);
+
+    // le récit de l'étage : pourquoi on est là, où on va. Une seule fois
+    // par partie (mourir ne le rejoue pas), et le niveau ne démarre
+    // qu'après l'appui qui clôt le texte.
+    PARTIE.histoireVue = PARTIE.histoireVue || {};
+    const recit = HISTOIRE.niveaux[Math.min(PARTIE.niveau, HISTOIRE.niveaux.length - 1)];
+    if (recit && !PARTIE.histoireVue[PARTIE.niveau]){
+      PARTIE.histoireVue[PARTIE.niveau] = true;
+      this.scene.pause();
+      montrerHistoire(recit, () => this.scene.resume());
+    }
   }
 
   // ── couleurs ────────────────────────────────────────────────
@@ -1449,8 +1606,13 @@ class Combat extends Phaser.Scene {
     this.sauvegarder();
     const r = this.majRecord();
     SON.jouer('final');
-    this.hudFin.setText('LE TOIT EST À TOI\n' + this.vaincus + ' monstres vaincus'
-      + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
+    // la conclusion d'abord — elle donne son sens au voyage — puis le score
+    this.scene.pause();
+    montrerHistoire(HISTOIRE.fin, () => {
+      this.scene.resume();
+      this.hudFin.setText('LE TOIT EST À TOI\n' + this.vaincus + ' monstres vaincus'
+        + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
+    });
   }
   terminer(titre){
     this.mortDebut = this.time.now;   // le sprite joue la chute une fois
@@ -2654,15 +2816,23 @@ Object.assign(Combat.prototype, {
 // d'accueil ; le prochain appui repart de zéro.
 // ─────────────────────────────────────────────────────────────
 let partie = null;
+let enRecit = false;   // l'intro se joue : ni relance, ni double départ
 
 function demarrer(){
-  if (partie || typeof Phaser === 'undefined') return;
+  if (partie || enRecit || typeof Phaser === 'undefined') return;
   document.body.classList.add('enjeu');
   SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
+  PARTIE = nouvellePartieEtat();
+  // l'histoire d'abord : Martin, le village, les monstres... le jeu n'est
+  // construit qu'après l'appui qui clôt le récit
+  enRecit = true;
+  montrerHistoire(HISTOIRE.intro, () => { enRecit = false; creerJeu(); });
+}
+
+function creerJeu(){
   ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false;
   ENTREE.accroupi = false; ENTREE.chargeAction = null; ENTREE.relache = null;
   ENTREE.haut = false; ENTREE.hautPresse = false; ENTREE.validePresse = false;
-  PARTIE = nouvellePartieEtat();
 
   partie = new Phaser.Game({
     type: Phaser.AUTO,

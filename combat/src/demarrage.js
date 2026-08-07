@@ -6,15 +6,23 @@
 // d'accueil ; le prochain appui repart de zéro.
 // ─────────────────────────────────────────────────────────────
 let partie = null;
+let enRecit = false;   // l'intro se joue : ni relance, ni double départ
 
 function demarrer(){
-  if (partie || typeof Phaser === 'undefined') return;
+  if (partie || enRecit || typeof Phaser === 'undefined') return;
   document.body.classList.add('enjeu');
   SON.demarrer();   // iOS n'ouvre l'audio que dans un geste utilisateur
+  PARTIE = nouvellePartieEtat();
+  // l'histoire d'abord : Martin, le village, les monstres... le jeu n'est
+  // construit qu'après l'appui qui clôt le récit
+  enRecit = true;
+  montrerHistoire(HISTOIRE.intro, () => { enRecit = false; creerJeu(); });
+}
+
+function creerJeu(){
   ENTREE.axeX = 0; ENTREE.saut = false; ENTREE.sautPresse = false;
   ENTREE.accroupi = false; ENTREE.chargeAction = null; ENTREE.relache = null;
   ENTREE.haut = false; ENTREE.hautPresse = false; ENTREE.validePresse = false;
-  PARTIE = nouvellePartieEtat();
 
   partie = new Phaser.Game({
     type: Phaser.AUTO,

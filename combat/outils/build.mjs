@@ -27,6 +27,7 @@ const ORDRE = [
   'partie.js',     // graine, état porté d'un étage à l'autre, record
   'son.js',        // tout l'audio, synthétisé
   'entrees.js',    // joystick, boutons, clavier, anti-zoom
+  'histoire.js',   // le récit : intro, interludes d'étage, conclusion
   'moteur.js',     // la scène : physique, combat, monstres, progression
   'rendu.js',      // décors et silhouettes, greffés sur la scène
   'demarrage.js',  // écran-titre et lancement

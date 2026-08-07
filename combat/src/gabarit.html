@@ -202,7 +202,31 @@
     .choix-diff button{padding:7px 10px}
     .record{margin-top:5px}
     .demarrer{margin-top:12px;padding:11px 20px}
+    .histoire-texte{font-size:12px;line-height:1.6}
+    .histoire-texte p{margin:0 0 8px}
   }
+
+  /* ── le récit : l'histoire s'écrit lettre à lettre ─────────── */
+  .histoire{
+    position:fixed;inset:0;z-index:30;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:calc(18px + env(safe-area-inset-top)) 28px calc(18px + env(safe-area-inset-bottom));
+    background:radial-gradient(120% 85% at 50% 32%, #1d2647 0%, #0d1120 58%, #070911 100%);
+    cursor:pointer;
+  }
+  .histoire[hidden]{display:none}
+  .histoire-texte{
+    max-width:620px;width:100%;
+    font:14px/1.9 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    color:#cbd5f0;text-align:center;text-shadow:0 0 14px rgba(203,213,240,.15);
+  }
+  .histoire-texte p{margin:0 0 12px;min-height:1em}
+  .histoire-suite{
+    margin-top:16px;
+    font-family:'Arcade',ui-monospace,monospace;font-size:10px;letter-spacing:.12em;
+    color:#4dd6c1;animation:cligne 1.2s steps(2) infinite;
+  }
+  @keyframes cligne{50%{opacity:.15}}
 </style>
 </head>
 <body>
@@ -225,6 +249,11 @@
 </div>
 
 <button class="son" id="son" title="Couper le son">♪</button>
+
+<div class="histoire" id="histoire" hidden>
+  <div class="histoire-texte" id="histoireTexte"></div>
+  <div class="histoire-suite" id="histoireSuite">▼ APPUIE POUR CONTINUER</div>
+</div>
 
 <div class="manette">
   <div class="socle" id="socle">

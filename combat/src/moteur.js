@@ -137,6 +137,17 @@ class Combat extends Phaser.Scene {
       .setStroke('#0d1120', 5).setOrigin(0.5).setScrollFactor(0).setDepth(11);
 
     this.message(this.def.nom + '  —  ' + this.def.sous);
+
+    // le récit de l'étage : pourquoi on est là, où on va. Une seule fois
+    // par partie (mourir ne le rejoue pas), et le niveau ne démarre
+    // qu'après l'appui qui clôt le texte.
+    PARTIE.histoireVue = PARTIE.histoireVue || {};
+    const recit = HISTOIRE.niveaux[Math.min(PARTIE.niveau, HISTOIRE.niveaux.length - 1)];
+    if (recit && !PARTIE.histoireVue[PARTIE.niveau]){
+      PARTIE.histoireVue[PARTIE.niveau] = true;
+      this.scene.pause();
+      montrerHistoire(recit, () => this.scene.resume());
+    }
   }
 
   // ── couleurs ────────────────────────────────────────────────
@@ -642,8 +653,13 @@ class Combat extends Phaser.Scene {
     this.sauvegarder();
     const r = this.majRecord();
     SON.jouer('final');
-    this.hudFin.setText('LE TOIT EST À TOI\n' + this.vaincus + ' monstres vaincus'
-      + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
+    // la conclusion d'abord — elle donne son sens au voyage — puis le score
+    this.scene.pause();
+    montrerHistoire(HISTOIRE.fin, () => {
+      this.scene.resume();
+      this.hudFin.setText('LE TOIT EST À TOI\n' + this.vaincus + ' monstres vaincus'
+        + '\nrecord ' + r.monstres + '\n\n↑ ou un bouton pour rejouer');
+    });
   }
   terminer(titre){
     this.mortDebut = this.time.now;   // le sprite joue la chute une fois
