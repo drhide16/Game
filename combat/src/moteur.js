@@ -467,10 +467,12 @@ class Combat extends Phaser.Scene {
     const dir = Math.sign(m.go.x - sourceX) || this.sens;
     const hautCri = m.go.y - m.def.taille[1]/2 - 16;
     m.pv -= degats; m.flash = 0.14;
-    if (!m.def.fixe){
-      m.assomme = 0.22; m.prepare = 0;
+    // tout coup au corps étourdit — l'écrasement étourdit un boss pour de
+    // bon : c'est la fenêtre pendant laquelle les tirs passent
+    m.assomme = Math.max(m.assomme, ecrase && m.def.boss ? 1.1 : 0.22);
+    m.prepare = 0;
+    if (!m.def.fixe)
       m.go.body.setVelocity(dir * recul * (m.def.boss ? 0.35 : 1), m.def.vole ? 0 : -160);
-    }
     SON.jouer('touche');
     this.cameras.main.shake(90, ecrase ? 0.006 : 0.0045);
     this.eclat(m.go.x, m.go.y, dir);
@@ -496,6 +498,17 @@ class Combat extends Phaser.Scene {
         if (m.def.final) this.gagnerPartie();
         else this.message(m.def.nom + ' EST À TERRE  —  LA SORTIE S\'OUVRE');
       }
+    }
+  }
+  // le tir dévié par un boss : le TING du blindage, et l'astuce qui
+  // revient tant qu'on insiste (même cadence que les autres conseils)
+  devierTir(m){
+    m.blinde = 0.18;
+    SON.jouer('blinde');
+    this.eclat(m.go.x, m.go.y, 0, 3, COUL.blinde);
+    if (this.astuceBossT === undefined || this.time.now > this.astuceBossT + 4000){
+      this.astuceBossT = this.time.now;
+      this.message('LE BOSS DÉVIE LES TIRS — SAUTE-LUI DESSUS POUR L\'ÉTOURDIR');
     }
   }
   casser(k, degats){
@@ -789,7 +802,10 @@ class Combat extends Phaser.Scene {
             if (m.mort || this.attaque.touches.has(m)) continue;
             if (zones.some(z => Phaser.Geom.Intersects.RectangleToRectangle(z, m.go.getBounds()))){
               this.attaque.touches.add(m);
-              this.frapper(m, c.degats + (this.attaque.elastique ? 1 : 0),
+              // le faisceau est une attaque à distance : les boss le dévient
+              // aussi tant qu'ils ne sont pas étourdis
+              if (c.faisceau && m.def.boss && m.assomme <= 0) this.devierTir(m);
+              else this.frapper(m, c.degats + (this.attaque.elastique ? 1 : 0),
                 c.recul, this.attaque.bas, this.joueur.x, false);
             }
           }
@@ -1012,6 +1028,8 @@ class Combat extends Phaser.Scene {
     const c = m.def.canon;
     m.repos = Math.max(0, m.repos - dt);
     m.tira = Math.max(0, (m.tira || 0) - dt);   // le flash du canon
+    // une tourelle sonnée ne vise plus : le temps de l'étourdissement
+    if (m.assomme > 0){ m.assomme -= dt; m.vise = 0; return; }
     if (m.vise > 0){
       m.vise -= dt;
       if (m.vise <= 0){
@@ -1021,6 +1039,7 @@ class Combat extends Phaser.Scene {
         this.tirsEnnemis.push({
           x:m.go.x + Math.sign(dx || 1)*12, y:m.go.y - 6,
           vx: dx/d * c.vitesse, vy: dy/d * c.vitesse, vie:2.2,
+          degats: c.degats || 1,
         });
         SON.jouer('tirEnnemi');
       }
@@ -1061,7 +1080,10 @@ class Combat extends Phaser.Scene {
       for (const m of this.monstres){
         if (m.mort) continue;
         if (Phaser.Geom.Intersects.RectangleToRectangle(boite, m.go.getBounds())){
-          this.frapper(m, t.degats, t.recul, t.bas, t.x - t.vx * 0.01);
+          // un boss qui a toute sa tête DÉVIE les tirs : il faut d'abord
+          // l'étourdir au corps (l'écrasement donne la meilleure fenêtre)
+          if (m.def.boss && m.assomme <= 0) this.devierTir(m);
+          else this.frapper(m, t.degats, t.recul, t.bas, t.x - t.vx * 0.01);
           t.fini = true; break;
         }
       }
@@ -1083,7 +1105,7 @@ class Combat extends Phaser.Scene {
       if (t.vie <= 0){ t.fini = true; continue; }
       const boite = new Phaser.Geom.Rectangle(t.x - 5, t.y - 5, 10, 10);
       if (Phaser.Geom.Intersects.RectangleToRectangle(boite, this.joueur.getBounds())){
-        this.blesser(t.x, 1);
+        this.blesser(t.x, t.degats || 1);
         t.fini = true;
       }
     }

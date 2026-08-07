@@ -61,8 +61,8 @@ const ARMES = {
 const MONSTRES = {
   baveux:  { pv:3,  taille:[26,30], vitesse: 85, patrouille:45, degats:0.25, vol:0,  faible:'bas',  silhouette:'brute' },
   // le drone vole ET tire : une visée courte puis un pruneau vers le joueur
-  drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:1, vol:46, faible:'haut', silhouette:'drone', vole:true,
-             canon:{ portee:300, visee:0.5, repos:2.8, vitesse:320 } },
+  drone:   { pv:2,  taille:[26,24], vitesse:110, patrouille:60, degats:0.5, vol:46, faible:'haut', silhouette:'drone', vole:true,
+             canon:{ portee:300, visee:0.5, repos:3.4, vitesse:320, degats:0.5 } },
   colosse: { pv:6,  taille:[52,68], vitesse: 52, patrouille:30, degats:2, vol:0,  faible:null,   silhouette:'brute', gros:true },
   // le gardien annonce son coup : il se ramasse, puis se détend d'un bloc
   gardien: { pv:6,  taille:[28,40], vitesse:120, patrouille:70, degats:1, vol:0,  faible:null,   silhouette:'gardien',
@@ -72,25 +72,25 @@ const MONSTRES = {
              fixe:true, canon:{ portee:430, visee:0.75, repos:2.1, vitesse:430 } },
   // Un boss garde la sortie de chaque étage. Ils réutilisent les
   // silhouettes existantes, en plus gros et avec leur propre couleur.
-  cogneur:  { pv:14, taille:[52,62], vitesse: 74, patrouille:34, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+  cogneur:  { pv:20, taille:[52,62], vitesse: 74, patrouille:34, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
               nom:'LE COGNEUR',              couleur:0x9b5f2f, ombre:0x6b3d1c },
-  chefSecu: { pv:16, taille:[34,48], vitesse:150, patrouille:80, degats:2, vol:0, faible:null, silhouette:'gardien', boss:true,
+  chefSecu: { pv:22, taille:[34,48], vitesse:150, patrouille:80, degats:2, vol:0, faible:null, silhouette:'gardien', boss:true,
               nom:'LE CHEF DE LA SÉCURITÉ',  couleur:0x2f8f7a, ombre:0x1c5c4d,
               charge:{ portee:280, preparation:0.36, elan:520, repos:1.4 } },
-  canonnier:{ pv:14, taille:[44,38], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
+  canonnier:{ pv:20, taille:[44,38], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
               nom:'LA TOURELLE LOURDE',      couleur:0x6b4a7f, ombre:0x412c4f,
               canon:{ portee:540, visee:0.5, repos:1.1, vitesse:520 } },
-  broyeur:  { pv:18, taille:[50,58], vitesse: 92, patrouille:44, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+  broyeur:  { pv:26, taille:[50,58], vitesse: 92, patrouille:44, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
               nom:'LE BROYEUR',              couleur:0xb03a3a, ombre:0x762222 },
-  grandBaveux:{ pv:10, taille:[44,50], vitesse: 70, patrouille:36, degats:1, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
+  grandBaveux:{ pv:16, taille:[44,50], vitesse: 70, patrouille:36, degats:1, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true,
               nom:'LE GRAND BAVEUX',         couleur:0x8f5fae, ombre:0x5d3a78 },
-  scorpion: { pv:12, taille:[34,44], vitesse:135, patrouille:70, degats:1, vol:0, faible:null, silhouette:'gardien', boss:true,
+  scorpion: { pv:18, taille:[34,44], vitesse:135, patrouille:70, degats:1, vol:0, faible:null, silhouette:'gardien', boss:true,
               nom:'LE SCORPION DES SABLES',  couleur:0xc2913a, ombre:0x8a6220,
               charge:{ portee:250, preparation:0.40, elan:480, repos:1.6 } },
-  sentinelle:{ pv:12, taille:[36,32], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
+  sentinelle:{ pv:18, taille:[36,32], vitesse:  0, patrouille:0,  degats:1, vol:0, faible:null, silhouette:'tourelle', fixe:true, boss:true,
               nom:'LA SENTINELLE',           couleur:0x5a7fa8, ombre:0x39536f,
               canon:{ portee:480, visee:0.6, repos:1.5, vitesse:470 } },
-  patron:   { pv:26, taille:[58,66], vitesse: 82, patrouille:40, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true, final:true,
+  patron:   { pv:36, taille:[58,66], vitesse: 82, patrouille:40, degats:2, vol:0, faible:null, silhouette:'brute',   gros:true, boss:true, final:true,
               nom:'LE PATRON',               couleur:0x9b2f2f, ombre:0x631d1d },
 };
 
