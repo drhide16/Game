@@ -117,10 +117,12 @@ const COUL = {
 // ─────────────────────────────────────────────────────────────
 // DIFFICULTÉ — choisie sur l'écran-titre, gardée en localStorage
 // ─────────────────────────────────────────────────────────────
+// coeurs et armes : la part des cadeaux qui reste — les soins et les
+// blocs bonus se font rares en moyen, encore plus en difficile
 const DIFFICULTES = {
-  facile:    { nom:'FACILE',    monstres:0.7, pv:0.7,  vitesse:0.9,  vies:4 },
-  moyen:     { nom:'MOYEN',     monstres:1.0, pv:1.0,  vitesse:1.0,  vies:3 },
-  difficile: { nom:'DIFFICILE', monstres:1.5, pv:1.35, vitesse:1.15, vies:3 },
+  facile:    { nom:'FACILE',    monstres:0.7, pv:0.7,  vitesse:0.9,  vies:4, coeurs:1.0,  armes:1.0 },
+  moyen:     { nom:'MOYEN',     monstres:1.0, pv:1.0,  vitesse:1.0,  vies:3, coeurs:0.6,  armes:0.7 },
+  difficile: { nom:'DIFFICILE', monstres:1.5, pv:1.35, vitesse:1.15, vies:3, coeurs:0.35, armes:0.45 },
 };
 let DIFFICULTE_CHOISIE = 'moyen';
 try {

@@ -191,9 +191,15 @@ class Combat extends Phaser.Scene {
   }
   creerPlateforme(x, y, w){
     // le corps physique est invisible : l'habillage est une corniche
-    // herbeuse, le haut de la tuile de sol
+    // assortie au décor — le haut de la tuile de sol du niveau
     const p = this.add.rectangle(x + w/2, y + 7, w, 14, 0, 0);
-    this.add.tileSprite(x + w/2, y + 10, w, CADRES_DECOR.plateforme.h, 'decorAtlas', 'plateforme')
+    const nomP = this.def.decor === 'desert' ? 'plateformeSable'
+               : this.def.decor === 'interieur' ? 'plateformeMetal'
+               : this.def.decor === 'toit' ? 'plateformeGravier'
+               : (this.def.decor === 'villeJour'
+                  || (this.def.decor === 'exterieur' && this.urbain(x + w/2) > 0.5)) ? 'plateformeVille'
+               : 'plateforme';
+    this.add.tileSprite(x + w/2, y + 10, w, CADRES_DECOR[nomP].h, 'decorAtlas', nomP)
       .setDepth(-4);
     this.physics.add.existing(p, true);
     p.body.checkCollision.down = false;
@@ -340,10 +346,14 @@ class Combat extends Phaser.Scene {
     // avec les trois pouvoirs en rotation
     this.blocs = [];
     let nb2 = 0;
+    // la part de segments servis suit la difficulté : ~70 % des grands
+    // segments en facile, ~49 % en moyen, ~31 % en difficile. Le seuil
+    // compense la densité de |sin| (P(|sin|<t) = 2·asin(t)/π).
+    const seuilArme = Math.sin(Math.PI/2 * (1 - 0.70 * (this.D.armes || 1)));
     for (let i = 1; i + 1 < this.segmentsSol.length; i++){
       const s = this.segmentsSol[i];
       if (s.x1 - s.x0 < 420) continue;
-      if (Math.abs(Math.sin(i * 9.17)) < 0.45) continue;
+      if (Math.abs(Math.sin(i * 9.17)) < seuilArme) continue;
       this.creerBloc((s.x0 + s.x1) / 2 + 60, ['pistolet','fusil','laser'][nb2++ % 3]);
     }
 
@@ -493,7 +503,8 @@ class Combat extends Phaser.Scene {
       SON.jouer('vaincu');
       this.eclat(m.go.x, m.go.y, dir, m.def.boss ? 34 : 14);
       this.crier(m.go.x, hautCri, m.def.boss ? CRIS.boss : CRIS.vaincu, '#ffd166', m.def.boss ? 26 : 20);
-      if (this.alea() < CFG.chanceCoeur || m.def.boss) this.creerObjet(m.go.x - 12, m.go.y - 8, 'coeur');
+      if (this.alea() < CFG.chanceCoeur * (this.D.coeurs || 1) || m.def.boss)
+        this.creerObjet(m.go.x - 12, m.go.y - 8, 'coeur');
       // le boss offre aussi une vie : elle part de l'autre côté pour que
       // les deux cadeaux ne se confondent pas
       if (m.def.boss) this.creerObjet(m.go.x + 14, m.go.y - 12, 'vie');
@@ -531,7 +542,8 @@ class Combat extends Phaser.Scene {
       k.casse = true;
       this.eclat(k.go.x, k.go.y - 4, this.sens, 16);
       this.crier(k.go.x, k.go.y - 24, CRIS.caisse, '#e8b06a', 15);
-      this.creerObjet(k.go.x, k.go.y - 8, this.butin());
+      const don = this.butin();
+      if (don) this.creerObjet(k.go.x, k.go.y - 8, don);
       k.img.setTexture('decorAtlas', 'caisseCassee');
       k.efface = 1.1;   // les débris restent un instant puis s'effacent
       k.go.destroy();
@@ -539,9 +551,11 @@ class Combat extends Phaser.Scene {
   }
   butin(){
     // les pouvoirs ne tombent plus des caisses : ils vivent dans les
-    // blocs bonus. Les caisses soignent, et parfois offrent une vie.
+    // blocs bonus. Les caisses soignent, et parfois offrent une vie —
+    // mais en difficile, certaines sont vides.
     const r = this.alea();
     if (r < 0.10) return 'vie';
+    if (this.alea() >= (this.D.coeurs || 1)) return null;
     return 'coeur';
   }
   eclat(x, y, sens, n, couleur){
