@@ -17,15 +17,13 @@ on:
 jobs:
   ftp:
     runs-on: ubuntu-latest
-    # Les secrets vivent dans l'environnement « deply_ovh ». Un job ne
-    # CHOISIT pas son environnement à l'exécution : il le déclare ici, et
-    # GitHub n'injecte les secrets d'un environnement que dans les jobs qui
-    # le nomment. Sans cette ligne, le job ne voit que les secrets du dépôt
-    # — aucun ici — d'où le déploiement systématiquement sauté.
-    # Le nom doit correspondre AU CARACTÈRE PRÈS : un nom inconnu fait
-    # créer un environnement vide, et les secrets seraient de nouveau
-    # absents (l'étape de diagnostic ci-dessous le dirait).
-    environment: deply_ovh
+    # Pas d'environnement déclaré, et c'est voulu : les secrets OVH sont des
+    # secrets DE DÉPÔT (Settings → Secrets and variables → Actions, section
+    # « Repository secrets »), donc visibles par tous les jobs. Les secrets
+    # d'un ENVIRONNEMENT, eux, n'arrivent que dans les jobs qui déclarent
+    # « environment: <nom> » — et cette déclaration ajoute au passage la
+    # porte d'approbation de l'environnement, qu'on préfère éviter pour un
+    # déploiement qui doit partir tout seul à chaque version.
     env:
       SERVEUR: ${{ secrets.OVH_FTP_SERVEUR }}
     steps:
