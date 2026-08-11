@@ -3,6 +3,19 @@
      modifier aquad/src/ puis relancer  node aquad/outils/build.mjs  -->
 <html lang="fr">
 <head>
+<!-- ── ANCIEN DOMAINE ─────────────────────────────────────────
+     Le site a déménagé sur www.ravail.org. La page d'accueil de
+     l'ancienne adresse l'annonce, mais elle ne rattrape pas les liens
+     profonds déjà partagés (marque-pages, QR codes imprimés) : ce
+     garde-fou s'en charge, AVANT de charger le moteur du jeu.
+     Le test porte sur le nom d'hôte : sur www.ravail.org comme en
+     fichier local (hostname vide), il ne se déclenche pas. -->
+<script>
+  if (location.hostname.slice(-10) === '.github.io')
+    location.replace('https://www.ravail.org/aquad/');
+</script>
+<noscript><meta http-equiv="refresh" content="0; url=https://www.ravail.org/aquad/"></noscript>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#08222e">
