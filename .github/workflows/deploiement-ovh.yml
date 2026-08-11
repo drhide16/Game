@@ -29,7 +29,10 @@ jobs:
         if: env.SERVEUR != ''
         run: |
           mkdir -p site/combat site/aquad
-          cp index.html site/
+          # accueil.html devient la page d'accueil du domaine ; index.html
+          # du dépôt, lui, est le panneau de déménagement de GitHub Pages
+          cp accueil.html site/index.html
+          cp mathshooter.html site/
           cp combat/index.html site/combat/
           cp aquad/index.html site/aquad/
       - name: Déployer par FTP
