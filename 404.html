@@ -1,14 +1,20 @@
 <!DOCTYPE html>
-<!-- Le menu du site : trois jeux, trois cartes. Chaque jeu reste un
-     fichier autonome dans son coin ; cette page ne fait que les présenter. -->
+<!-- PRÊT À POSER, PAS ENCORE EN LIGNE : le jour où www.ravail.org sert
+     le site, il suffit de   cp redirection.html index.html   pour que
+     GitHub Pages ne serve plus que ce panneau. Tant que la destination
+     est vide, index.html continue de servir le jeu comme avant.
+     Page de déménagement : GitHub Pages ne sert plus que ce panneau, qui
+     renvoie vers le vrai site. Le compte à rebours laisse le temps de LIRE
+     la nouvelle adresse — c'est elle qu'il faut retenir, pas ce lien-ci. -->
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d1120">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Martin Games">
-<title>Martin Games — choisis ton jeu</title>
+<title>Page introuvable — Martin Games a déménagé</title>
+<link rel="canonical" href="https://www.ravail.org/">
+<!-- la redirection marche même sans JavaScript -->
+<meta http-equiv="refresh" content="6; url=https://www.ravail.org/">
 <style>
 
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -32,63 +38,57 @@
   .logo .l1{font-size:clamp(26px,8vw,52px);color:#4dd6c1;text-shadow:0 4px 0 #1b6a5f,0 0 28px rgba(77,214,193,.45)}
   .logo .l2{font-size:clamp(26px,8vw,52px);color:#ff9d2e;margin-top:.34em;text-shadow:0 4px 0 #8a4f10,0 0 28px rgba(255,157,46,.4)}
 
-  body{justify-content:flex-start}
-  .presente{font-size:10px;letter-spacing:.34em;color:#6a76a4;margin-top:20px}
-  .jeux{
-    display:flex;flex-wrap:wrap;gap:18px;justify-content:center;
-    margin-top:30px;width:100%;max-width:980px;
+  .panneau{max-width:600px;width:100%}
+  .fleche{font-size:clamp(34px,9vw,56px);margin:26px 0 10px;animation:pousse 1.6s ease-in-out infinite}
+  @keyframes pousse{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
+  .avis{font-size:clamp(13px,3.4vw,17px);color:#8d9ac4;margin-top:22px}
+  .adresse{
+    display:inline-block;margin-top:18px;padding:16px 26px;border-radius:999px;
+    background:#4dd6c1;color:#0d1120;text-decoration:none;
+    font-family:'Arcade',ui-monospace,monospace;font-size:clamp(11px,3vw,16px);letter-spacing:.05em;
+    box-shadow:0 5px 0 #26857a;
   }
-  .jeu{
-    flex:1 1 260px;max-width:300px;
-    display:flex;flex-direction:column;align-items:center;
-    padding:26px 20px 24px;border-radius:22px;text-decoration:none;color:inherit;
-    background:rgba(27,35,64,.55);border:2px solid var(--c);
-    box-shadow:0 0 0 rgba(0,0,0,0);transition:transform .12s, box-shadow .2s;
+  .adresse:active{transform:translateY(3px);box-shadow:0 2px 0 #26857a}
+  .compte{margin-top:20px;font-size:12px;letter-spacing:.18em;color:#3f4870}
+  /* l'avertissement doit accrocher l'œil : c'est LUI qui évite la coupure */
+  .rappel{
+    max-width:520px;margin:30px auto 0;padding:16px 20px;border-radius:16px;
+    background:rgba(255,157,46,.10);border:1px solid rgba(255,157,46,.45);
+    color:#ffc98a;font-size:clamp(12px,3.2vw,15px);line-height:1.65;
   }
-  .jeu:hover{transform:translateY(-4px);box-shadow:0 10px 30px rgba(0,0,0,.45)}
-  .jeu:active{transform:translateY(2px)}
-  .vignette{font-size:54px;line-height:1;filter:drop-shadow(0 0 18px var(--c))}
-  .nom{
-    font-family:'Arcade',ui-monospace,monospace;font-size:14px;letter-spacing:.06em;
-    color:var(--c);margin-top:16px;
-  }
-  .quoi{font-size:13px;color:#8d9ac4;margin-top:12px;min-height:3.4em}
-  .jouer{
-    margin-top:14px;padding:11px 22px;border-radius:999px;
-    background:var(--c);color:#0d1120;
-    font-family:'Arcade',ui-monospace,monospace;font-size:9px;letter-spacing:.08em;
-  }
-  .j1{--c:#6f9bff} .j2{--c:#4dd6c1} .j3{--c:#e585c8}
-  .pied{margin-top:34px;font-size:11px;letter-spacing:.14em;color:#3f4870}
-  .astuce{margin-top:8px;font-size:11px;color:#4a5478}
+  .rappel b{color:#ff9d2e}
 </style>
 </head>
 <body>
+<div class="panneau">
   <div class="logo"><span class="l1">MARTIN</span><span class="l2">GAMES</span></div>
-  <div class="presente">CHOISIS TON JEU</div>
-
-  <div class="jeux">
-    <a class="jeu j1" href="mathshooter.html">
-      <div class="vignette">🚀</div>
-      <div class="nom">MATH SHOOTER</div>
-      <div class="quoi">Opération spatiale : pilote ton vaisseau et calcule vite pour améliorer tes armes.</div>
-      <div class="jouer">JOUER</div>
-    </a>
-    <a class="jeu j2" href="combat/">
-      <div class="vignette">👊</div>
-      <div class="nom">COMBAT</div>
-      <div class="quoi">L'aventure de Martin en pixel art : traverse la forêt, la ville et la tour du Patron.</div>
-      <div class="jouer">JOUER</div>
-    </a>
-    <a class="jeu j3" href="aquad/">
-      <div class="vignette">🌊</div>
-      <div class="nom">AQUAD</div>
-      <div class="quoi">L'île en vue 3D isométrique : explore et bats-toi de tous les côtés.</div>
-      <div class="jouer">JOUER</div>
-    </a>
-  </div>
-
-  <p class="pied">WWW.RAVAIL.ORG</p>
-  <p class="astuce">Astuce : « Ajouter à l'écran d'accueil » sur ton téléphone, et le jeu s'ouvre en plein écran.</p>
+  <div class="fleche">📦 ➜ 🏠</div>
+  <p class="avis">Les jeux ont déménagé !<br>Ils sont maintenant à cette adresse :</p>
+  <a class="adresse" href="https://www.ravail.org/">WWW.RAVAIL.ORG</a>
+  <p class="compte" id="compte">Redirection dans 6 secondes…</p>
+  <p class="rappel">
+    <b>Pense à mettre à jour ton raccourci !</b><br>
+    Cette ancienne adresse s'arrêtera le <b>1<sup>er</sup> septembre</b>.
+    Après cette date, elle ne marchera plus : garde bien
+    <b>www.ravail.org</b> dans tes favoris.
+  </p>
+</div>
+<script>
+  // Le compte à rebours visible : on comprend ce qui se passe au lieu de
+  // subir un saut de page. Le meta refresh ci-dessus reste le filet de
+  // sécurité quand JavaScript est coupé.
+  // Une seule destination possible, écrite en dur : rien dans l'URL ne
+  // peut détourner ce panneau vers un autre site.
+  var reste = 6, el = document.getElementById('compte');
+  setInterval(function(){
+    reste--;
+    if (reste <= 0){
+      el.textContent = 'On y va !';
+      location.replace('https://www.ravail.org/');
+      return;
+    }
+    el.textContent = 'Redirection dans ' + reste + ' seconde' + (reste > 1 ? 's' : '') + '…';
+  }, 1000);
+</script>
 </body>
 </html>
