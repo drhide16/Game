@@ -50,6 +50,15 @@
   }
   .adresse:active{transform:translateY(3px);box-shadow:0 2px 0 #26857a}
   .compte{margin-top:20px;font-size:12px;letter-spacing:.18em;color:#3f4870}
+  .cible{margin-top:14px;font-size:clamp(12px,3.2vw,15px);color:#6a76a4}
+  .cible b{color:#4dd6c1;font-weight:normal}
+  /* l'avertissement doit accrocher l'œil : c'est LUI qui évite la coupure */
+  .rappel{
+    max-width:520px;margin:30px auto 0;padding:16px 20px;border-radius:16px;
+    background:rgba(255,157,46,.10);border:1px solid rgba(255,157,46,.45);
+    color:#ffc98a;font-size:clamp(12px,3.2vw,15px);line-height:1.65;
+  }
+  .rappel b{color:#ff9d2e}
 </style>
 </head>
 <body>
@@ -57,16 +66,43 @@
   <div class="logo"><span class="l1">MARTIN</span><span class="l2">GAMES</span></div>
   <div class="fleche">📦 ➜ 🏠</div>
   <p class="avis">Les jeux ont déménagé !<br>Ils sont maintenant à cette adresse :</p>
-  <a class="adresse" href="https://www.ravail.org/">WWW.RAVAIL.ORG</a>
+  <a class="adresse" id="adresse" href="https://www.ravail.org/">WWW.RAVAIL.ORG</a>
+  <p class="cible" id="cible"></p>
   <p class="compte" id="compte">Redirection dans 6 secondes…</p>
+  <p class="rappel">
+    <b>Pense à mettre à jour ton raccourci !</b><br>
+    Cette ancienne adresse s'arrêtera le <b>1<sup>er</sup> septembre</b>.
+    Après cette date, elle ne marchera plus : garde bien
+    <b>www.ravail.org</b> dans tes favoris.
+  </p>
 </div>
 <script>
+  // D'où vient-on ? Un lien profond (/Game/combat/) nous envoie ici avec
+  // ?vers=combat pour que le panneau annonce LA BONNE destination.
+  // La cible est piochée dans une liste fermée : on ne fabrique jamais une
+  // URL à partir du paramètre, sinon la page pourrait servir de tremplin
+  // vers n'importe quel site.
+  var DESTINATIONS = {
+    '':            { url:'https://www.ravail.org/',                quoi:'' },
+    'combat':      { url:'https://www.ravail.org/combat/',         quoi:'COMBAT' },
+    'aquad':       { url:'https://www.ravail.org/aquad/',          quoi:'AQUAD' },
+    'mathshooter': { url:'https://www.ravail.org/mathshooter.html', quoi:'MATH SHOOTER' }
+  };
+  var demande = (location.search.match(/[?&]vers=([a-z]*)/) || [])[1] || '';
+  var dest = DESTINATIONS[demande] || DESTINATIONS[''];
+
+  if (dest.quoi){
+    document.getElementById('cible').innerHTML =
+      'Tu voulais jouer à <b>' + dest.quoi + '</b> : on t\'y emmène.';
+  }
+  document.getElementById('adresse').href = dest.url;
+
   // le compte à rebours visible : on comprend ce qui se passe au lieu de
   // subir un saut de page. Le meta refresh reste le filet de sécurité.
   var reste = 6, el = document.getElementById('compte');
   setInterval(function(){
     reste--;
-    if (reste <= 0){ el.textContent = 'On y va !'; location.replace('https://www.ravail.org/'); return; }
+    if (reste <= 0){ el.textContent = 'On y va !'; location.replace(dest.url); return; }
     el.textContent = 'Redirection dans ' + reste + ' seconde' + (reste > 1 ? 's' : '') + '…';
   }, 1000);
 </script>
