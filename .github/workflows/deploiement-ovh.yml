@@ -20,6 +20,23 @@ jobs:
     env:
       SERVEUR: ${{ secrets.OVH_FTP_SERVEUR }}
     steps:
+      # Diagnostic : QUELS noms Actions voit-il ? Les valeurs ne sortent
+      # jamais — on ne lit que les clés du JSON, secrets comme variables.
+      - name: Noms visibles par Actions
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          VARS_JSON: ${{ toJSON(vars) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          s = sorted(json.loads(os.environ['SECRETS_JSON']).keys())
+          v = sorted(json.loads(os.environ['VARS_JSON']).keys())
+          print('SECRETS   :', s or '— aucun —')
+          print('VARIABLES :', v or '— aucune —')
+          for a in ('OVH_FTP_SERVEUR', 'OVH_FTP_UTILISATEUR', 'OVH_FTP_MOT_DE_PASSE'):
+              print(f'  {a:22} ->',
+                    'secret OK' if a in s else ('rangé en VARIABLE' if a in v else 'INTROUVABLE'))
+          PY
       - name: Secrets présents ?
         if: env.SERVEUR == ''
         run: echo "Secrets OVH absents — déploiement sauté." && exit 0
